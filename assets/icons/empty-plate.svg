@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer plate border -->
+  <circle cx="100" cy="100" r="80" stroke="#CCCCCC" stroke-width="8" fill="white"/>
+  
+  <!-- Inner decorative ring -->
+  <circle cx="100" cy="100" r="60" stroke="#DDDDDD" stroke-width="2" fill="none"/>
+  
+  <!-- Decorative elements -->
+  <circle cx="100" cy="100" r="40" stroke="#EEEEEE" stroke-width="4" fill="none"/>
+  
+  <!-- Sad face to indicate empty -->
+  <circle cx="80" cy="85" r="5" fill="#CCCCCC"/>
+  <circle cx="120" cy="85" r="5" fill="#CCCCCC"/>
+  <path d="M70 130 Q100 110 130 130" stroke="#CCCCCC" stroke-width="5" fill="none"/>
+</svg> 
