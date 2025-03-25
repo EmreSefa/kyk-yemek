@@ -1,25 +1,86 @@
 import React, { useState, useEffect, useRef } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, NavigationState } from "@react-navigation/native";
+import {
+  Platform,
+  useColorScheme,
+  View,
+  ActivityIndicator,
+  Alert,
+  Linking,
+} from "react-native";
+import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { RootStackParamList } from "./navigation/types";
 import { AuthProvider } from "./hooks/useAuth";
-import { UserPreferencesProvider } from "./hooks/useUserPreferences";
+import {
+  UserPreferencesProvider,
+  useUserPreferences,
+} from "./hooks/useUserPreferences";
 import { ThemeProvider, useTheme } from "./hooks/useTheme";
-import { useColorScheme, View, ActivityIndicator, Alert } from "react-native";
+import {
+  NotificationProvider,
+  useNotifications,
+} from "./hooks/useNotifications";
 import { useAuth } from "./hooks/useAuth";
 import AuthNavigator from "./navigation/AuthNavigator";
 import MainTabNavigator from "./navigation/MainTabNavigator";
 import OnboardingNavigator from "./navigation/OnboardingNavigator";
 import { supabase } from "../lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Linking } from "react-native";
+import { WidgetManager } from "./widgets/WidgetManager";
+import { UPDATE_INTERVALS } from "./widgets/utils/widgetConstants";
 
 // Component to handle StatusBar style based on color scheme
 function ThemeAwareStatusBar() {
   const { isDark } = useTheme();
   return <StatusBar style={isDark ? "light" : "dark"} />;
+}
+
+// Component to initialize notifications when the app is ready
+function NotificationInitializer() {
+  const { initializeNotifications } = useNotifications();
+
+  useEffect(() => {
+    // Initialize notifications
+    const setupNotifications = async () => {
+      await initializeNotifications();
+    };
+
+    setupNotifications();
+  }, []);
+
+  return null; // This component doesn't render anything
+}
+
+// Component to initialize widgets when the app is ready
+function WidgetInitializer() {
+  const { selectedCityId } = useUserPreferences();
+  const { isAuthenticated, user } = useAuth();
+
+  useEffect(() => {
+    // Initialize widgets only if authenticated and city is selected
+    if (isAuthenticated && selectedCityId && user?.id) {
+      // Initialize widgets with user ID and selected city
+      WidgetManager.initialize(user.id, selectedCityId)
+        .then(() => console.log("Widgets initialized successfully"))
+        .catch((error) =>
+          console.error("Widget initialization failed:", error)
+        );
+
+      // Set up periodic updates
+      const updateInterval = UPDATE_INTERVALS.DEFAULT; // 6 hours
+      const intervalId = setInterval(() => {
+        WidgetManager.updateWidgetData(selectedCityId).catch((error) =>
+          console.error("Widget update failed:", error)
+        );
+      }, updateInterval);
+
+      return () => clearInterval(intervalId);
+    }
+  }, [isAuthenticated, selectedCityId, user]);
+
+  return null; // This component doesn't render anything
 }
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -64,185 +125,79 @@ function RootNavigator() {
 
       // Try to get from AsyncStorage first (faster)
       const cityId = await AsyncStorage.getItem("kyk_yemek_selected_city");
-      const universityId = await AsyncStorage.getItem(
-        "kyk_yemek_selected_university"
-      );
       const dormId = await AsyncStorage.getItem("kyk_yemek_selected_dorm");
 
-      console.log("Initial preferences from AsyncStorage:", {
-        cityIdStr: cityId,
-        universityIdStr: universityId,
-        dormIdStr: dormId,
-      });
-
-      if (cityId) {
+      // Consider onboarding complete if at least city and dorm are selected
+      if (cityId && dormId) {
         setHasCompletedOnboarding(true);
-      } else {
-        console.log("User is logged in, loading preferences from database");
-        // If not in AsyncStorage, check database
-        const { data, error } = await supabase
-          .from("users")
-          .select("city_id, university_id, dormitory_id")
-          .eq("id", user.id);
+        setCheckingOnboarding(false);
 
-        // User record might not exist yet or might not have any preferences
-        if (error) {
-          console.error(
-            "Database error when fetching user preferences:",
-            error
-          );
-          setHasCompletedOnboarding(false);
-          return;
-        }
+        // Mark onboarding as completed for future reference
+        await AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true");
+        return;
+      }
 
-        // Check if we have any user data
-        if (data && data.length > 0) {
-          const userData = data[0]; // Get first user record
-          // Consider onboarding complete if at least city is selected
-          const hasCompleted = !!userData.city_id;
-          setHasCompletedOnboarding(hasCompleted);
+      // If we don't have sufficient preferences in AsyncStorage, check database
+      const { data, error } = await supabase
+        .from("users")
+        .select("city_id, university_id, dormitory_id")
+        .eq("id", user.id);
 
-          // If preferences exist in DB but not in AsyncStorage, save them locally
-          if (hasCompleted) {
-            // Mark onboarding as completed for future reference
+      // User record might not exist yet or might not have any preferences
+      if (error) {
+        console.error("Database error when fetching user preferences:", error);
+        setHasCompletedOnboarding(false);
+        setCheckingOnboarding(false);
+        return;
+      }
+
+      // Check if we have any user data
+      if (data && data.length > 0) {
+        const userData = data[0]; // Get first user record
+        // Consider onboarding complete if at least city and dormitory are selected
+        const hasCompleted = !!userData.city_id && !!userData.dormitory_id;
+        setHasCompletedOnboarding(hasCompleted);
+        setCheckingOnboarding(false);
+
+        // If preferences exist in DB but not in AsyncStorage, save them locally
+        if (hasCompleted) {
+          // Mark onboarding as completed for future reference
+          await AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true");
+
+          if (userData.city_id) {
             await AsyncStorage.setItem(
-              "kyk_yemek_onboarding_completed",
-              "true"
+              "kyk_yemek_selected_city",
+              userData.city_id.toString()
             );
-
-            if (userData.city_id) {
-              await AsyncStorage.setItem(
-                "kyk_yemek_selected_city",
-                userData.city_id.toString()
-              );
-            }
-            if (userData.university_id) {
-              await AsyncStorage.setItem(
-                "kyk_yemek_selected_university",
-                userData.university_id.toString()
-              );
-            }
-            if (userData.dormitory_id) {
-              await AsyncStorage.setItem(
-                "kyk_yemek_selected_dorm",
-                userData.dormitory_id.toString()
-              );
-            }
           }
-        } else {
-          // No user data found, need to go through onboarding
-          console.log("No user preferences found in database");
-          setHasCompletedOnboarding(false);
+          if (userData.dormitory_id) {
+            await AsyncStorage.setItem(
+              "kyk_yemek_selected_dorm",
+              userData.dormitory_id.toString()
+            );
+          }
         }
+      } else {
+        // No user data found, need to go through onboarding
+        console.log("No user preferences found in database");
+        setHasCompletedOnboarding(false);
+        setCheckingOnboarding(false);
       }
     } catch (error) {
       console.error("Error checking onboarding status:", error);
       setHasCompletedOnboarding(false);
-    } finally {
       setCheckingOnboarding(false);
     }
   }
 
-  // Effect to check onboarding status when authentication changes or when the user is in onboarding flow
+  // Effect to check onboarding status when authentication changes
   useEffect(() => {
     if (isAuthenticated && user) {
       checkOnboardingStatusAsync();
-
-      // If user is in onboarding flow, set up more frequent checks
-      if (!hasCompletedOnboarding) {
-        const intervalId = setInterval(() => {
-          console.log("Periodic onboarding status check...");
-          checkOnboardingStatusAsync();
-        }, 1500); // check every 1.5 seconds while in onboarding
-
-        return () => clearInterval(intervalId);
-      }
     } else {
       setCheckingOnboarding(false);
     }
-  }, [isAuthenticated, user, refreshTrigger, hasCompletedOnboarding]);
-
-  // Effect to listen for AsyncStorage changes in onboarding completion
-  useEffect(() => {
-    // Create a listener for AsyncStorage changes
-    const checkStorageForOnboardingCompletion = async () => {
-      try {
-        const completed = await AsyncStorage.getItem(
-          "kyk_yemek_onboarding_completed"
-        );
-
-        // Check for all preferences when onboarding is completed
-        if (completed === "true") {
-          // If we need to refresh our state, do it
-          if (!hasCompletedOnboarding) {
-            console.log("Onboarding completion detected, refreshing app state");
-            recheckOnboardingStatus();
-          }
-        }
-      } catch (error) {
-        console.error("Error checking AsyncStorage:", error);
-      }
-    };
-
-    // Set up an interval to check for changes (only during development)
-    const intervalId = setInterval(checkStorageForOnboardingCompletion, 1000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [hasCompletedOnboarding]);
-
-  // Add deep link handling for password reset
-  useEffect(() => {
-    // Set up deep link handling
-    const subscription = Linking.addEventListener("url", ({ url }) => {
-      console.log("Deep link received:", url);
-
-      // Check if this is a password reset link
-      if (url.includes("type=recovery")) {
-        // Extract the token
-        const params = url.split("#")[1];
-        if (params) {
-          const urlParams = new URLSearchParams(params);
-          const accessToken = urlParams.get("access_token");
-
-          if (accessToken) {
-            console.log("Received password reset with access token");
-            // Navigate to the ResetPassword screen
-            if (navigationRef.current) {
-              // @ts-ignore - we know this works
-              navigationRef.current.navigate("Auth", {
-                screen: "ResetPassword",
-                params: { token: accessToken },
-              });
-            } else {
-              // If navigation ref isn't ready, show an alert
-              Alert.alert(
-                "Şifre Sıfırlama",
-                "Şifre sıfırlama bağlantısı algılandı. Lütfen uygulamayı açın ve yeni şifrenizi belirleyin.",
-                [{ text: "Tamam" }]
-              );
-            }
-          }
-        }
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, [navigationRef]);
-
-  // Debug logging
-  console.log("[RootNavigator] Auth state:", {
-    isAuthenticated,
-    isLoading,
-    hasUser: !!user,
-    hasSession: !!session,
-    hasCompletedOnboarding,
-    checkingOnboarding,
-    userEmail: user?.email,
-  });
+  }, [isAuthenticated, user, refreshTrigger]);
 
   if (isLoading || (isAuthenticated && checkingOnboarding)) {
     return (
@@ -252,19 +207,28 @@ function RootNavigator() {
     );
   }
 
+  // Determine the initial route
+  let initialRoute: "Auth" | "Main" | "Onboarding" = "Auth";
+
+  if (isAuthenticated) {
+    initialRoute = hasCompletedOnboarding ? "Main" : "Onboarding";
+    console.log(`[RootNavigator] Setting initial route to: ${initialRoute}`);
+  }
+
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!isAuthenticated ? (
-        // Auth flow for non-authenticated users
+    <>
+      <ThemeAwareStatusBar />
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName={initialRoute}
+      >
         <Stack.Screen name="Auth" component={AuthNavigator} />
-      ) : !hasCompletedOnboarding ? (
-        // Onboarding flow for authenticated users who haven't completed onboarding
-        <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
-      ) : (
-        // Main flow for authenticated users who have completed onboarding
         <Stack.Screen name="Main" component={MainTabNavigator} />
-      )}
-    </Stack.Navigator>
+        <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
+      </Stack.Navigator>
+      <NotificationInitializer />
+      <WidgetInitializer />
+    </>
   );
 }
 
@@ -275,36 +239,15 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ThemeAwareStatusBar />
-        <NavigationContainer
-          ref={navigationRef}
-          onStateChange={(state) => {
-            // When returning to Auth screen after onboarding completion, refresh app state
-            const currentRouteName = state?.routes?.[0]?.name;
-            if (currentRouteName === "Auth") {
-              console.log(
-                "[App] Navigation state changed to Auth, triggering recheck"
-              );
-              // Force a refresh of AsyncStorage values in auth state
-              AsyncStorage.getItem("kyk_yemek_onboarding_completed").then(
-                (completed) => {
-                  if (completed === "true") {
-                    console.log(
-                      "[App] Onboarding marked as completed, refreshing app"
-                    );
-                    // This might reload parts of the app
-                  }
-                }
-              );
-            }
-          }}
-        >
-          <AuthProvider>
-            <UserPreferencesProvider>
-              <RootNavigator />
-            </UserPreferencesProvider>
-          </AuthProvider>
-        </NavigationContainer>
+        <AuthProvider>
+          <UserPreferencesProvider>
+            <NotificationProvider>
+              <NavigationContainer ref={navigationRef}>
+                <RootNavigator />
+              </NavigationContainer>
+            </NotificationProvider>
+          </UserPreferencesProvider>
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

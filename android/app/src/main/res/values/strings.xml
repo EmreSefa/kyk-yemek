@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KYK Yemek</string>
+    
+    <!-- Widget Strings -->
+    <string name="widget_name">KYK Yemek</string>
+    <string name="widget_description">Güncel yemek menüsünü görüntüle</string>
+    <string name="widget_loading">Yükleniyor...</string>
+    <string name="widget_no_data">Veri bulunamadı</string>
+    <string name="widget_breakfast">Kahvaltı</string>
+    <string name="widget_dinner">Akşam Yemeği</string>
+    <string name="widget_more_items">+ %1$d diğer yemek</string>
+    <string name="widget_configure_title">KYK Yemek Widget Ayarları</string>
+    <string name="widget_configure_info">Widget yemek menüsünü güncel tutmak için uygulama çalışır durumda olmalıdır.</string>
+    <string name="widget_size_title">Widget boyutu:</string>
+    <string name="widget_size_small">Küçük (sadece yemek tipi ve tarih)</string>
+    <string name="widget_size_medium">Orta (3 yemek öğesi)</string>
+    <string name="widget_size_large">Büyük (tüm yemek listesi)</string>
+    <string name="widget_confirm">Tamamla</string>
+</resources> 
