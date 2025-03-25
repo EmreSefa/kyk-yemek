@@ -3,20 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
-  Modal,
-  FlatList,
   ActivityIndicator,
-  TextInput,
-  SafeAreaView,
+  Dimensions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import {
   useUserPreferences,
   City,
   Dormitory,
 } from "../hooks/useUserPreferences";
-import { useColorScheme } from "react-native";
+import { useTheme } from "../hooks/useTheme";
+import DropDownPicker from "react-native-dropdown-picker";
 
 interface LocationSelectorProps {
   onCitySelected?: (cityId: number, cityName: string) => void;
@@ -27,296 +23,255 @@ function LocationSelector({
   onCitySelected,
   onDormSelected,
 }: LocationSelectorProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useTheme();
+  const screenHeight = Dimensions.get("window").height;
 
   const {
     cities,
     dorms,
     selectedCityId,
     selectedDormId,
-    loading,
-    setSelectedCity,
-    setSelectedDorm,
+    loading: isLoading,
+    setSelectedCity: updateUserCity,
+    setSelectedDorm: updateUserDorm,
     dormsByCity,
   } = useUserPreferences();
 
-  const [showCityModal, setShowCityModal] = useState(false);
-  const [showDormModal, setShowDormModal] = useState(false);
-  const [searchText, setSearchText] = useState("");
+  // Dropdown state
+  const [cityOpen, setCityOpen] = useState(false);
+  const [dormOpen, setDormOpen] = useState(false);
+  const [cityValue, setCityValue] = useState<number | null>(null);
+  const [dormValue, setDormValue] = useState<number | null>(null);
 
-  // Selected location names
-  const [selectedCityName, setSelectedCityName] = useState<string>("Seçilmedi");
-  const [selectedDormName, setSelectedDormName] = useState<string>("Seçilmedi");
+  // Prepare dropdown items
+  const [cityItems, setCityItems] = useState<any[]>([]);
+  const [dormItems, setDormItems] = useState<any[]>([]);
 
-  // Update selected names when values change
+  // Format cities for dropdown
+  useEffect(() => {
+    if (cities.length > 0) {
+      const formattedCities = cities.map((city) => ({
+        label: city.name,
+        value: city.id,
+      }));
+      setCityItems(formattedCities);
+    }
+  }, [cities]);
+
+  // Set initial values
   useEffect(() => {
     if (selectedCityId) {
-      const city = cities.find((c) => c.id === selectedCityId);
-      if (city) {
-        setSelectedCityName(city.name);
-      }
-    } else {
-      setSelectedCityName("Seçilmedi");
+      setCityValue(selectedCityId);
     }
-
     if (selectedDormId) {
-      const dorm = dorms.find((d) => d.id === selectedDormId);
-      if (dorm) {
-        setSelectedDormName(dorm.name);
+      setDormValue(selectedDormId);
+    }
+  }, [selectedCityId, selectedDormId]);
+
+  // Update dorm items when city changes
+  useEffect(() => {
+    if (cityValue) {
+      const dormsForCity = dormsByCity(cityValue);
+      const formattedDorms = dormsForCity.map((dorm) => ({
+        label: dorm.name,
+        value: dorm.id,
+      }));
+      setDormItems(formattedDorms);
+
+      // Reset dorm selection if city changes
+      if (selectedDormId && dormValue) {
+        const dormExists = dormsForCity.some((dorm) => dorm.id === dormValue);
+        if (!dormExists) {
+          setDormValue(null);
+          updateUserDorm(null);
+        }
       }
     } else {
-      setSelectedDormName("Seçilmedi");
+      setDormItems([]);
+      setDormValue(null);
     }
-  }, [selectedCityId, selectedDormId, cities, dorms]);
+  }, [cityValue, dormsByCity]);
 
   // Handle city selection
-  const handleCitySelect = async (city: City) => {
-    setShowCityModal(false);
-    setSearchText("");
-
-    // Only update if city changed
-    if (city.id !== selectedCityId) {
-      await setSelectedCity(city.id);
-      setSelectedCityName(city.name);
-      setSelectedDormName("Seçilmedi");
-
-      if (onCitySelected) {
-        onCitySelected(city.id, city.name);
+  const handleCityChange = async (value: number | null) => {
+    if (value !== selectedCityId) {
+      await updateUserCity(value);
+      if (onCitySelected && value) {
+        const city = cities.find((c) => c.id === value);
+        if (city) {
+          onCitySelected(city.id, city.name);
+        }
       }
     }
   };
 
-  // Handle dormitory selection
-  const handleDormSelect = async (dorm: Dormitory) => {
-    setShowDormModal(false);
-    setSearchText("");
-
-    // Only update if dorm changed
-    if (dorm.id !== selectedDormId) {
-      await setSelectedDorm(dorm.id);
-      setSelectedDormName(dorm.name);
-
-      if (onDormSelected) {
-        onDormSelected(dorm.id, dorm.name);
+  // Handle dorm selection
+  const handleDormChange = async (value: number | null) => {
+    if (value !== selectedDormId) {
+      await updateUserDorm(value);
+      if (onDormSelected && value) {
+        const dorm = dorms.find((d) => d.id === value);
+        if (dorm) {
+          onDormSelected(dorm.id, dorm.name);
+        }
       }
     }
   };
 
-  // Filter cities based on search text
-  const filteredCities = searchText
-    ? cities.filter((city) =>
-        city.name.toLowerCase().includes(searchText.toLowerCase())
-      )
-    : cities;
+  // When one dropdown is open, close the other
+  useEffect(() => {
+    if (cityOpen) {
+      setDormOpen(false);
+    }
+  }, [cityOpen]);
 
-  // Get dorms for selected city
-  const dormsForCity = selectedCityId ? dormsByCity(selectedCityId) : [];
+  useEffect(() => {
+    if (dormOpen) {
+      setCityOpen(false);
+    }
+  }, [dormOpen]);
 
-  // Filter dorms based on search
-  const filteredDormsForCity = searchText
-    ? dormsForCity.filter((dorm) =>
-        dorm.name.toLowerCase().includes(searchText.toLowerCase())
-      )
-    : dormsForCity;
+  // Get current location names
+  const getCityName = () => {
+    if (!selectedCityId) return "Şehir Seçilmedi";
+    const city = cities.find((c) => c.id === selectedCityId);
+    return city ? city.name : "Şehir Seçilmedi";
+  };
 
-  // Render a city item
-  const renderCityItem = ({ item }: { item: City }) => (
-    <TouchableOpacity
-      style={[
-        styles.itemContainer,
-        selectedCityId === item.id && styles.selectedItem,
-        isDark && selectedCityId === item.id && styles.darkSelectedItem,
-      ]}
-      onPress={() => handleCitySelect(item)}
-    >
-      <Text
-        style={[
-          styles.itemText,
-          selectedCityId === item.id && styles.selectedItemText,
-          isDark && selectedCityId === item.id && styles.darkSelectedItemText,
-        ]}
-      >
-        {item.name}
-      </Text>
-      {selectedCityId === item.id && (
-        <Ionicons
-          name="checkmark"
-          size={20}
-          color={isDark ? "#fff" : "#4A6572"}
-        />
-      )}
-    </TouchableOpacity>
-  );
-
-  // Render a dormitory item
-  const renderDormItem = ({ item }: { item: Dormitory }) => (
-    <TouchableOpacity
-      style={[
-        styles.itemContainer,
-        selectedDormId === item.id && styles.selectedItem,
-        isDark && selectedDormId === item.id && styles.darkSelectedItem,
-      ]}
-      onPress={() => handleDormSelect(item)}
-    >
-      <Text
-        style={[
-          styles.itemText,
-          selectedDormId === item.id && styles.selectedItemText,
-          isDark && selectedDormId === item.id && styles.darkSelectedItemText,
-        ]}
-      >
-        {item.name}
-      </Text>
-      {selectedDormId === item.id && (
-        <Ionicons
-          name="checkmark"
-          size={20}
-          color={isDark ? "#fff" : "#4A6572"}
-        />
-      )}
-    </TouchableOpacity>
-  );
+  const getDormName = () => {
+    if (!selectedDormId) return "Yurt Seçilmedi";
+    const dorm = dorms.find((d) => d.id === selectedDormId);
+    return dorm ? dorm.name : "Yurt Seçilmedi";
+  };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.darkContainer]}>
       <Text style={[styles.title, isDark && styles.darkText]}>
-        Konum Seçiniz
+        Yemek Konumu
       </Text>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#4A6572" style={styles.loader} />
+      {isLoading ? (
+        <ActivityIndicator
+          size="large"
+          color={isDark ? "#738F9E" : "#4A6572"}
+          style={styles.loader}
+        />
       ) : (
-        <>
-          {/* City Selector */}
-          <TouchableOpacity
-            style={[styles.selectorButton, isDark && styles.darkSelectorButton]}
-            onPress={() => setShowCityModal(true)}
-          >
-            <Text style={[styles.selectorText, isDark && styles.darkText]}>
-              {selectedCityName}
-            </Text>
-            <Ionicons
-              name="chevron-down"
-              size={22}
-              color={isDark ? "#fff" : "#333"}
-            />
-          </TouchableOpacity>
-
-          {/* Dorm Selector - Only enabled if city is selected */}
-          <TouchableOpacity
+        <View style={styles.dropdownsContainer}>
+          {/* Current Location Display */}
+          <View
             style={[
-              styles.selectorButton,
-              isDark && styles.darkSelectorButton,
-              !selectedCityId && styles.disabledButton,
+              styles.locationDisplay,
+              isDark && styles.darkLocationDisplay,
             ]}
-            onPress={() => selectedCityId && setShowDormModal(true)}
-            disabled={!selectedCityId}
           >
-            <Text
-              style={[
-                styles.selectorText,
-                isDark && styles.darkText,
-                !selectedCityId && styles.disabledText,
-              ]}
-            >
-              {selectedCityId ? selectedDormName : "Yurt Seçiniz"}
+            <Text style={[styles.locationLabel, isDark && styles.darkText]}>
+              Güncel Konum
             </Text>
-            <Ionicons
-              name="chevron-down"
-              size={22}
-              color={!selectedCityId || isDark ? "#aaa" : "#333"}
+            <Text
+              style={[styles.locationValue, isDark && styles.darkHighlightText]}
+            >
+              {getCityName()}, {getDormName()}
+            </Text>
+          </View>
+
+          {/* City Dropdown */}
+          <View style={styles.dropdownWrapper}>
+            <Text style={[styles.dropdownLabel, isDark && styles.darkText]}>
+              Şehir
+            </Text>
+            <DropDownPicker
+              open={cityOpen}
+              value={cityValue}
+              items={cityItems}
+              setOpen={setCityOpen}
+              setValue={setCityValue}
+              onChangeValue={handleCityChange}
+              placeholder="Şehir Seçiniz"
+              searchable={true}
+              searchPlaceholder="Şehir Ara..."
+              listMode="MODAL"
+              modalTitle="Şehir Seçiniz"
+              modalProps={{
+                animationType: "slide",
+              }}
+              maxHeight={screenHeight * 0.5}
+              style={[styles.dropdown, isDark && styles.darkDropdown]}
+              textStyle={[styles.dropdownText, isDark && styles.darkText]}
+              placeholderStyle={[
+                styles.placeholderText,
+                isDark && styles.darkPlaceholderText,
+              ]}
+              searchContainerStyle={isDark ? styles.darkSearchContainer : {}}
+              searchTextInputStyle={isDark ? styles.darkSearchInput : {}}
+              listItemContainerStyle={isDark ? styles.darkListItem : {}}
+              listItemLabelStyle={isDark ? styles.darkItemText : {}}
+              selectedItemContainerStyle={[
+                styles.selectedItem,
+                isDark && styles.darkSelectedItem,
+              ]}
+              selectedItemLabelStyle={styles.selectedItemText}
+              modalContentContainerStyle={isDark ? styles.darkModalContent : {}}
+              ArrowDownIconComponent={({ style }) => (
+                <Text style={[style, isDark && { color: "#fff" }]}>▼</Text>
+              )}
+              ArrowUpIconComponent={({ style }) => (
+                <Text style={[style, isDark && { color: "#fff" }]}>▲</Text>
+              )}
             />
-          </TouchableOpacity>
+          </View>
 
-          {/* City Selection Modal */}
-          <Modal
-            animationType="slide"
-            transparent={true}
-            visible={showCityModal}
-            onRequestClose={() => setShowCityModal(false)}
-          >
-            <View style={styles.centeredView}>
-              <View style={[styles.modalView, isDark && styles.darkModalView]}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, isDark && styles.darkText]}>
-                    Şehir Seçiniz
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowCityModal(false)}>
-                    <Ionicons
-                      name="close"
-                      size={24}
-                      color={isDark ? "#fff" : "#333"}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <TextInput
-                  style={[styles.searchInput, isDark && styles.darkSearchInput]}
-                  placeholder="Şehir Ara..."
-                  placeholderTextColor={isDark ? "#aaa" : "#999"}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-
-                <FlatList
-                  data={filteredCities}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={renderCityItem}
-                  style={styles.list}
-                />
-              </View>
-            </View>
-          </Modal>
-
-          {/* Dorm Selection Modal */}
-          <Modal
-            animationType="slide"
-            transparent={true}
-            visible={showDormModal}
-            onRequestClose={() => setShowDormModal(false)}
-          >
-            <View style={styles.centeredView}>
-              <View style={[styles.modalView, isDark && styles.darkModalView]}>
-                <View style={styles.modalHeader}>
-                  <Text style={[styles.modalTitle, isDark && styles.darkText]}>
-                    Yurt Seçiniz
-                  </Text>
-                  <TouchableOpacity onPress={() => setShowDormModal(false)}>
-                    <Ionicons
-                      name="close"
-                      size={24}
-                      color={isDark ? "#fff" : "#333"}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <TextInput
-                  style={[styles.searchInput, isDark && styles.darkSearchInput]}
-                  placeholder="Yurt Ara..."
-                  placeholderTextColor={isDark ? "#aaa" : "#999"}
-                  value={searchText}
-                  onChangeText={setSearchText}
-                />
-
-                {filteredDormsForCity.length > 0 ? (
-                  <FlatList
-                    data={filteredDormsForCity}
-                    keyExtractor={(item) => item.id.toString()}
-                    renderItem={renderDormItem}
-                    style={styles.list}
-                  />
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Text style={[styles.emptyText, isDark && styles.darkText]}>
-                      Bu şehirde kayıtlı yurt bulunamadı
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          </Modal>
-        </>
+          {/* Dorm Dropdown */}
+          <View style={styles.dropdownWrapper}>
+            <Text style={[styles.dropdownLabel, isDark && styles.darkText]}>
+              Yurt
+            </Text>
+            <DropDownPicker
+              open={dormOpen}
+              value={dormValue}
+              items={dormItems}
+              setOpen={setDormOpen}
+              setValue={setDormValue}
+              onChangeValue={handleDormChange}
+              placeholder="Yurt Seçiniz"
+              searchable={true}
+              searchPlaceholder="Yurt Ara..."
+              listMode="MODAL"
+              modalTitle="Yurt Seçiniz"
+              modalProps={{
+                animationType: "slide",
+              }}
+              maxHeight={screenHeight * 0.5}
+              disabled={!cityValue}
+              disabledStyle={[
+                styles.disabledDropdown,
+                isDark && styles.darkDisabledDropdown,
+              ]}
+              style={[styles.dropdown, isDark && styles.darkDropdown]}
+              textStyle={[styles.dropdownText, isDark && styles.darkText]}
+              placeholderStyle={[
+                styles.placeholderText,
+                isDark && styles.darkPlaceholderText,
+              ]}
+              searchContainerStyle={isDark ? styles.darkSearchContainer : {}}
+              searchTextInputStyle={isDark ? styles.darkSearchInput : {}}
+              listItemContainerStyle={isDark ? styles.darkListItem : {}}
+              listItemLabelStyle={isDark ? styles.darkItemText : {}}
+              selectedItemContainerStyle={[
+                styles.selectedItem,
+                isDark && styles.darkSelectedItem,
+              ]}
+              selectedItemLabelStyle={styles.selectedItemText}
+              modalContentContainerStyle={isDark ? styles.darkModalContent : {}}
+              ArrowDownIconComponent={({ style }) => (
+                <Text style={[style, isDark && { color: "#fff" }]}>▼</Text>
+              )}
+              ArrowUpIconComponent={({ style }) => (
+                <Text style={[style, isDark && { color: "#fff" }]}>▲</Text>
+              )}
+            />
+          </View>
+        </View>
       )}
     </View>
   );
@@ -334,138 +289,117 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  darkContainer: {
+    backgroundColor: "#262626",
+    borderColor: "#444",
+  },
   title: {
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 16,
     color: "#333",
   },
-  selectorButton: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  selectorText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  disabledButton: {
-    backgroundColor: "#F0F0F0",
-    borderColor: "#E0E0E0",
-  },
-  disabledText: {
-    color: "#999",
-  },
-  centeredView: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalView: {
-    width: "90%",
-    maxHeight: "80%",
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  searchInput: {
-    height: 45,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-    fontSize: 16,
-    backgroundColor: "#F9F9F9",
-  },
-  list: {
-    maxHeight: 400,
-  },
-  itemContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-  },
-  itemText: {
-    fontSize: 16,
-    color: "#333",
-  },
-  selectedItem: {
-    backgroundColor: "#F0F7FF",
-    borderLeftWidth: 3,
-    borderLeftColor: "#4A6572",
-  },
-  selectedItemText: {
-    color: "#333",
-    fontWeight: "500",
-  },
-  emptyContainer: {
-    padding: 20,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#999",
-    textAlign: "center",
+  darkText: {
+    color: "#F5F5F5",
   },
   loader: {
     marginVertical: 20,
   },
-  // Dark mode styles
-  darkText: {
-    color: "#fff",
+  dropdownsContainer: {
+    gap: 16,
   },
-  darkSelectorButton: {
-    backgroundColor: "#2C2C2C",
-    borderColor: "#444",
+  locationDisplay: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: "#4A6572",
   },
-  darkModalView: {
-    backgroundColor: "#1E1E1E",
-    borderColor: "#333",
-  },
-  darkSearchInput: {
-    backgroundColor: "#2C2C2C",
-    borderColor: "#444",
-    color: "#fff",
-  },
-  darkSelectedItem: {
-    backgroundColor: "#3A3F44",
+  darkLocationDisplay: {
+    backgroundColor: "#333",
     borderLeftColor: "#738F9E",
   },
-  darkSelectedItemText: {
-    color: "#738F9E",
+  locationLabel: {
+    fontSize: 14,
     fontWeight: "500",
+    color: "#666",
+    marginBottom: 4,
+  },
+  locationValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#4A6572",
+  },
+  darkHighlightText: {
+    color: "#8EACBD",
+  },
+  dropdownWrapper: {
+    marginBottom: 5,
+  },
+  dropdownLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 8,
+    color: "#333",
+  },
+  dropdown: {
+    backgroundColor: "#fff",
+    borderColor: "#E0E0E0",
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+  },
+  darkDropdown: {
+    backgroundColor: "#333",
+    borderColor: "#555",
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  placeholderText: {
+    color: "#999",
+    fontSize: 16,
+  },
+  darkPlaceholderText: {
+    color: "#aaa",
+  },
+  disabledDropdown: {
+    backgroundColor: "#f0f0f0",
+    opacity: 0.7,
+  },
+  darkDisabledDropdown: {
+    backgroundColor: "#2a2a2a",
+    opacity: 0.7,
+  },
+  selectedItem: {
+    backgroundColor: "#e8f1f5",
+  },
+  darkSelectedItem: {
+    backgroundColor: "#3A4D57",
+  },
+  selectedItemText: {
+    fontWeight: "500",
+  },
+  darkSearchContainer: {
+    backgroundColor: "#333",
+    borderColor: "#555",
+  },
+  darkSearchInput: {
+    backgroundColor: "#444",
+    color: "#fff",
+    borderColor: "#555",
+  },
+  darkListItem: {
+    backgroundColor: "#333",
+  },
+  darkItemText: {
+    color: "#fff",
+  },
+  darkModalContent: {
+    backgroundColor: "#222",
   },
 });
 
