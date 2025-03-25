@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "./useAuth";
 import { mealService } from "../../lib/services/mealService";
+import { WidgetManager } from "../widgets/WidgetManager";
 
 // Define types for location data
 export interface City {
@@ -580,28 +581,35 @@ export function UserPreferencesProvider({
 
   // Public function to set a city
   const setSelectedCity = async (cityId: number | null) => {
-    console.log(`Setting selected city to: ${cityId}`);
     setSelectedCityId(cityId);
+    try {
+      if (cityId !== null) {
+        await AsyncStorage.setItem(CITY_STORAGE_KEY, cityId.toString());
 
-    if (cityId === null) {
-      // Clear saved city
-      console.log("Clearing saved city");
-      await AsyncStorage.removeItem(CITY_STORAGE_KEY);
-      // Clear dorm too
-      setSelectedDormId(null);
-      await AsyncStorage.removeItem(DORM_STORAGE_KEY);
-    } else {
-      // Update city preference
-      console.log(`Updating city preference to ID: ${cityId}`);
-      await updateUserCity(cityId);
+        // Also save to database if user is logged in
+        if (user) {
+          await supabase
+            .from("users")
+            .update({ city_id: cityId })
+            .eq("id", user.id);
+        }
+
+        // Load universities for this city
+        loadUniversities(cityId);
+
+        // Load dormitories for this city
+        loadDormitories(cityId);
+
+        // Update widgets with new city selection
+        WidgetManager.updateWidgetData(cityId).catch((error) => {
+          console.error("Failed to update widgets after city change:", error);
+        });
+      } else {
+        await AsyncStorage.removeItem(CITY_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error("Error setting selected city:", error);
     }
-
-    // Log the current state after updating
-    console.log("City preference updated. Current state:", {
-      selectedCityId: cityId,
-      universities: universities.length,
-      dorms: dormitories.length,
-    });
   };
 
   // Public function to set a university
@@ -620,13 +628,27 @@ export function UserPreferencesProvider({
   // Public function to set a dorm
   const setSelectedDorm = async (dormId: number | null) => {
     setSelectedDormId(dormId);
+    try {
+      if (dormId !== null) {
+        await AsyncStorage.setItem(DORM_STORAGE_KEY, dormId.toString());
 
-    if (dormId === null) {
-      // Clear saved dorm
-      await AsyncStorage.removeItem(DORM_STORAGE_KEY);
-    } else {
-      // Update dorm preference
-      await updateUserDorm(dormId);
+        // Also save to database if user is logged in
+        if (user) {
+          await supabase
+            .from("users")
+            .update({ dormitory_id: dormId })
+            .eq("id", user.id);
+        }
+
+        // Update widgets with new dorm selection
+        WidgetManager.updateWidgetData(selectedCityId || 0).catch((error) => {
+          console.error("Failed to update widgets after dorm change:", error);
+        });
+      } else {
+        await AsyncStorage.removeItem(DORM_STORAGE_KEY);
+      }
+    } catch (error) {
+      console.error("Error setting selected dorm:", error);
     }
   };
 
@@ -651,7 +673,7 @@ export function UserPreferencesProvider({
   };
 
   // Load universities for a specific city
-  const loadUniversitiesForCity = async (cityId: number) => {
+  const loadUniversities = async (cityId: number) => {
     try {
       console.log(`Loading universities for city ID: ${cityId}...`);
       setLoading(true);
@@ -683,10 +705,7 @@ export function UserPreferencesProvider({
         setUniversities([]);
       }
     } catch (err) {
-      console.error(
-        `Failed in loadUniversitiesForCity for city ${cityId}:`,
-        err
-      );
+      console.error(`Failed in loadUniversities for city ${cityId}:`, err);
       setError("Bir hata oluştu");
       setUniversities([]);
     } finally {

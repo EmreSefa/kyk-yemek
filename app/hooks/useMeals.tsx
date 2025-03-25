@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
+import { useState, useEffect, useCallback } from "react";
 import { format, addDays, startOfWeek, isSameDay } from "date-fns";
 import { tr } from "date-fns/locale";
 import { useUserPreferences } from "./useUserPreferences";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "./useAuth";
+import { mealService } from "../../lib/services/mealService";
 
 // Define interfaces for meal data
 export interface MealItem {
   id: number;
-  meal_id: number;
+  city_menu_id: number;
   item_name: string;
   calories: number | null;
   description: string | null;
@@ -18,8 +20,16 @@ export interface Meal {
   meal_date: string;
   meal_type: "BREAKFAST" | "DINNER";
   city_id: number;
+  city_name?: string;
   dorm_id: number | null;
-  meal_items: MealItem[];
+  dorm_name?: string;
+  menu_items_text?: string;
+  items?: MealItem[];
+  meal_items?: MealItem[];
+  totalCalories?: number;
+  likes?: number;
+  dislikes?: number;
+  userRating?: "like" | "dislike" | null;
 }
 
 export interface DailyMeals {
@@ -31,7 +41,8 @@ export interface DailyMeals {
 }
 
 export const useMeals = () => {
-  const { selectedCityId, selectedDormId } = useUserPreferences();
+  const { selectedCityId } = useUserPreferences();
+  const { user } = useAuth();
 
   const [todayMeals, setTodayMeals] = useState<{
     breakfast: Meal | null;
@@ -43,184 +54,308 @@ export const useMeals = () => {
   const [weeklyMeals, setWeeklyMeals] = useState<DailyMeals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userRatings, setUserRatings] = useState<
+    Record<number, "like" | "dislike">
+  >({});
 
-  // Function to fetch today's meals
-  const fetchTodayMeals = async () => {
-    try {
-      if (!selectedCityId) {
-        setError("Lütfen şehir seçiniz");
-        setIsLoading(false);
-        return;
-      }
+  // Load user ratings from storage
+  useEffect(() => {
+    const loadUserRatings = async () => {
+      if (!user) return;
 
-      setIsLoading(true);
-      setError(null);
-
-      const today = new Date();
-      const formattedDate = format(today, "yyyy-MM-dd");
-
-      // Query to get today's meals with their items
-      const { data, error } = await supabase
-        .from("meals")
-        .select(
-          `
-          id,
-          meal_date,
-          meal_type,
-          city_id,
-          dorm_id,
-          meal_items (
-            id,
-            meal_id,
-            item_name,
-            calories,
-            description
-          )
-        `
-        )
-        .eq("meal_date", formattedDate)
-        .eq("city_id", selectedCityId)
-        .order("meal_type");
-
-      if (error) {
-        console.error("Error fetching today meals:", error);
-        setError("Yemek bilgileri alınamadı, lütfen tekrar deneyin.");
-        return;
-      }
-
-      // Filter by dorm if provided
-      const filteredMeals = selectedDormId
-        ? data?.filter(
-            (meal) => meal.dorm_id === selectedDormId || meal.dorm_id === null
-          )
-        : data;
-
-      // Organize meals by type
-      let breakfast = null;
-      let dinner = null;
-
-      filteredMeals?.forEach((meal) => {
-        if (meal.meal_type === "BREAKFAST") {
-          breakfast = meal as Meal;
-        } else if (meal.meal_type === "DINNER") {
-          dinner = meal as Meal;
+      try {
+        const ratingsJson = await AsyncStorage.getItem(
+          `menu_ratings_${user.id}`
+        );
+        if (ratingsJson) {
+          setUserRatings(JSON.parse(ratingsJson));
         }
-      });
+      } catch (err) {
+        console.error("Failed to load menu ratings:", err);
+      }
+    };
 
-      setTodayMeals({
-        breakfast,
-        dinner,
-      });
+    loadUserRatings();
+  }, [user]);
+
+  // Function to save user ratings
+  const saveUserRatings = async (
+    newRatings: Record<number, "like" | "dislike">
+  ) => {
+    if (!user) return;
+
+    try {
+      await AsyncStorage.setItem(
+        `menu_ratings_${user.id}`,
+        JSON.stringify(newRatings)
+      );
     } catch (err) {
-      console.error("Failed to fetch today meals:", err);
-      setError("Bir hata oluştu, lütfen tekrar deneyin.");
-    } finally {
-      setIsLoading(false);
+      console.error("Failed to save menu ratings:", err);
     }
   };
 
-  // Function to fetch weekly meals
-  const fetchWeeklyMeals = async () => {
+  // Function to rate a meal
+  const rateMeal = async (mealId: number, rating: "like" | "dislike") => {
+    if (!user) return false;
+
     try {
-      if (!selectedCityId) {
-        setError("Lütfen şehir seçiniz");
-        setIsLoading(false);
-        return;
+      // Check if user already rated this meal
+      const currentRating = userRatings[mealId];
+      let newRatings = { ...userRatings };
+
+      if (currentRating === rating) {
+        // User is toggling off their rating
+        delete newRatings[mealId];
+      } else {
+        // User is setting or changing their rating
+        newRatings[mealId] = rating;
       }
 
-      setIsLoading(true);
-      setError(null);
+      // Update state
+      setUserRatings(newRatings);
 
-      // Calculate date range for the current week
-      const today = new Date();
-      const startDate = startOfWeek(today, { weekStartsOn: 1 }); // Start from Monday
-      const dateRange = Array.from({ length: 7 }).map((_, i) => {
-        const date = addDays(startDate, i);
-        return format(date, "yyyy-MM-dd");
+      // Save ratings to AsyncStorage
+      await saveUserRatings(newRatings);
+
+      // Update any relevant meals in state
+      setTodayMeals((prev) => {
+        const updatedMeals = { ...prev };
+
+        if (updatedMeals.breakfast && updatedMeals.breakfast.id === mealId) {
+          updatedMeals.breakfast = {
+            ...updatedMeals.breakfast,
+            userRating: newRatings[mealId] || null,
+            likes:
+              (updatedMeals.breakfast.likes || 0) +
+              (currentRating !== "like" && newRatings[mealId] === "like"
+                ? 1
+                : currentRating === "like" && !newRatings[mealId]
+                ? -1
+                : 0),
+            dislikes:
+              (updatedMeals.breakfast.dislikes || 0) +
+              (currentRating !== "dislike" && newRatings[mealId] === "dislike"
+                ? 1
+                : currentRating === "dislike" && !newRatings[mealId]
+                ? -1
+                : 0),
+          };
+        }
+
+        if (updatedMeals.dinner && updatedMeals.dinner.id === mealId) {
+          updatedMeals.dinner = {
+            ...updatedMeals.dinner,
+            userRating: newRatings[mealId] || null,
+            likes:
+              (updatedMeals.dinner.likes || 0) +
+              (currentRating !== "like" && newRatings[mealId] === "like"
+                ? 1
+                : currentRating === "like" && !newRatings[mealId]
+                ? -1
+                : 0),
+            dislikes:
+              (updatedMeals.dinner.dislikes || 0) +
+              (currentRating !== "dislike" && newRatings[mealId] === "dislike"
+                ? 1
+                : currentRating === "dislike" && !newRatings[mealId]
+                ? -1
+                : 0),
+          };
+        }
+
+        return updatedMeals;
       });
 
-      // Fetch meals for the entire week
-      const { data, error } = await supabase
-        .from("meals")
-        .select(
-          `
-          id,
-          meal_date,
-          meal_type,
-          city_id,
-          dorm_id,
-          meal_items (
-            id,
-            meal_id,
-            item_name,
-            calories,
-            description
-          )
-        `
-        )
-        .in("meal_date", dateRange)
-        .eq("city_id", selectedCityId)
-        .order("meal_date")
-        .order("meal_type");
+      setWeeklyMeals((prev) => {
+        return prev.map((dailyMeal) => {
+          const updatedDaily = { ...dailyMeal };
 
-      if (error) {
-        console.error("Error fetching weekly meals:", error);
-        setError("Haftalık yemek bilgileri alınamadı, lütfen tekrar deneyin.");
-        return;
-      }
+          if (updatedDaily.breakfast && updatedDaily.breakfast.id === mealId) {
+            updatedDaily.breakfast = {
+              ...updatedDaily.breakfast,
+              userRating: newRatings[mealId] || null,
+              likes:
+                (updatedDaily.breakfast.likes || 0) +
+                (currentRating !== "like" && newRatings[mealId] === "like"
+                  ? 1
+                  : currentRating === "like" && !newRatings[mealId]
+                  ? -1
+                  : 0),
+              dislikes:
+                (updatedDaily.breakfast.dislikes || 0) +
+                (currentRating !== "dislike" && newRatings[mealId] === "dislike"
+                  ? 1
+                  : currentRating === "dislike" && !newRatings[mealId]
+                  ? -1
+                  : 0),
+            };
+          }
 
-      // Filter by dorm if provided
-      const filteredMeals = selectedDormId
-        ? data?.filter(
-            (meal) => meal.dorm_id === selectedDormId || meal.dorm_id === null
-          )
-        : data;
+          if (updatedDaily.dinner && updatedDaily.dinner.id === mealId) {
+            updatedDaily.dinner = {
+              ...updatedDaily.dinner,
+              userRating: newRatings[mealId] || null,
+              likes:
+                (updatedDaily.dinner.likes || 0) +
+                (currentRating !== "like" && newRatings[mealId] === "like"
+                  ? 1
+                  : currentRating === "like" && !newRatings[mealId]
+                  ? -1
+                  : 0),
+              dislikes:
+                (updatedDaily.dinner.dislikes || 0) +
+                (currentRating !== "dislike" && newRatings[mealId] === "dislike"
+                  ? 1
+                  : currentRating === "dislike" && !newRatings[mealId]
+                  ? -1
+                  : 0),
+            };
+          }
 
-      // Organize meals by day and type
-      const weekMeals: DailyMeals[] = dateRange.map((dateStr) => {
-        const date = new Date(dateStr);
-        const dayMeals = filteredMeals?.filter(
-          (meal) => meal.meal_date === dateStr
+          return updatedDaily;
+        });
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Error rating meal:", error);
+      return false;
+    }
+  };
+
+  // Prepare meal data with proper structure
+  const processMeal = useCallback(
+    (meal: any): Meal => {
+      // Calculate total calories from items
+      const totalCalories =
+        meal.items?.reduce(
+          (sum: number, item: MealItem) => sum + (item.calories || 0),
+          0
+        ) || 0;
+
+      return {
+        ...meal,
+        meal_type: meal.meal_type as "BREAKFAST" | "DINNER",
+        // Add default likes/dislikes for UI
+        likes: Math.floor(Math.random() * 30) + 5, // Random values for demonstration
+        dislikes: Math.floor(Math.random() * 10),
+        userRating: userRatings[meal.id] || null,
+        totalCalories,
+        // Keep meal_items compatible with the existing structure
+        meal_items: meal.items || [],
+      };
+    },
+    [userRatings]
+  );
+
+  // Fetch today's meals
+  const fetchTodayMeals = useCallback(async () => {
+    if (!selectedCityId) {
+      setTodayMeals({ breakfast: null, dinner: null });
+      setError("Lütfen bir şehir seçin");
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Only pass cityId, not dormId since there's no relationship
+      const meals = await mealService.getTodayMeals(selectedCityId);
+
+      // Process meals for today
+      const breakfast = meals.find((m: any) => m.meal_type === "BREAKFAST");
+      const dinner = meals.find((m: any) => m.meal_type === "DINNER");
+
+      setTodayMeals({
+        breakfast: breakfast ? processMeal(breakfast) : null,
+        dinner: dinner ? processMeal(dinner) : null,
+      });
+    } catch (err) {
+      console.error("Error fetching today's meals:", err);
+      setError("Yemek bilgileri alınamadı. Lütfen tekrar deneyin.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedCityId, processMeal]);
+
+  // Fetch weekly meals
+  const fetchWeeklyMeals = useCallback(async () => {
+    if (!selectedCityId) {
+      setWeeklyMeals([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Calculate week start and end
+      const today = new Date();
+      const startDate = startOfWeek(today, { weekStartsOn: 1 });
+      const endDate = addDays(startDate, 6);
+
+      // Format dates for query
+      const startDateStr = format(startDate, "yyyy-MM-dd");
+      const endDateStr = format(endDate, "yyyy-MM-dd");
+
+      // Fetch meals from service - only pass cityId, not dormId
+      const meals = await mealService.getWeeklyMeals(
+        startDateStr,
+        endDateStr,
+        selectedCityId
+      );
+
+      // Process into daily structure
+      const dailyMeals: DailyMeals[] = [];
+
+      // Create an entry for each day of the week
+      for (let i = 0; i < 7; i++) {
+        const date = addDays(startDate, i);
+        const dateStr = format(date, "yyyy-MM-dd");
+
+        // Find meals for this day
+        const dayBreakfast = meals.find(
+          (m: any) => m.meal_date === dateStr && m.meal_type === "BREAKFAST"
         );
 
-        let breakfast = null;
-        let dinner = null;
+        const dayDinner = meals.find(
+          (m: any) => m.meal_date === dateStr && m.meal_type === "DINNER"
+        );
 
-        dayMeals?.forEach((meal) => {
-          if (meal.meal_type === "BREAKFAST") {
-            breakfast = meal as Meal;
-          } else if (meal.meal_type === "DINNER") {
-            dinner = meal as Meal;
-          }
-        });
-
-        return {
+        dailyMeals.push({
           date,
           formatted_date: format(date, "d MMMM", { locale: tr }),
           day_name: format(date, "EEEE", { locale: tr }),
-          breakfast,
-          dinner,
-        };
-      });
+          breakfast: dayBreakfast ? processMeal(dayBreakfast) : null,
+          dinner: dayDinner ? processMeal(dayDinner) : null,
+        });
+      }
 
-      setWeeklyMeals(weekMeals);
+      setWeeklyMeals(dailyMeals);
     } catch (err) {
-      console.error("Failed to fetch weekly meals:", err);
-      setError("Bir hata oluştu, lütfen tekrar deneyin.");
+      console.error("Error fetching weekly meals:", err);
+      setError("Haftalık yemek bilgileri alınamadı. Lütfen tekrar deneyin.");
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedCityId, processMeal]);
 
-  // Refresh meals when location preferences change
+  // Fetch meals when city or dorm changes
   useEffect(() => {
     fetchTodayMeals();
-  }, [selectedCityId, selectedDormId]);
+    fetchWeeklyMeals();
+  }, [fetchTodayMeals, fetchWeeklyMeals]);
 
-  // Check if a date is today
-  const isToday = (date: Date) => {
-    return isSameDay(date, new Date());
-  };
+  // Helper function to check if a date is today
+  const isToday = useCallback((date: Date) => {
+    const today = new Date();
+    return (
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+    );
+  }, []);
 
   return {
     todayMeals,
@@ -229,8 +364,7 @@ export const useMeals = () => {
     error,
     fetchTodayMeals,
     fetchWeeklyMeals,
+    rateMeal,
     isToday,
-    selectedCityId,
-    selectedDormId,
   };
 };

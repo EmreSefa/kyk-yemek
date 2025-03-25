@@ -1,11 +1,29 @@
+import React from "react";
+
+// Root stack navigator types
+export type RootStackParamList = {
+  Auth: undefined;
+  Onboarding: undefined;
+  Main: undefined;
+};
+
+// Auth stack navigator types
 export type AuthStackParamList = {
   Welcome: undefined;
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
-  SetupPreferences: undefined;
+  ResetPassword: { token: string };
 };
 
+// Onboarding stack navigator types
+export type OnboardingStackParamList = {
+  CitySelection: undefined;
+  UniversitySelection: { cityId: number };
+  DormitorySelection: { cityId: number; universityId: number };
+};
+
+// Main tab navigator types
 export type MainTabParamList = {
   Home: undefined;
   WeeklyMenu: undefined;
@@ -18,7 +36,8 @@ export type MealStackParamList = {
   MealDetails: { mealId: number };
 };
 
-export type RootStackParamList = {
-  Auth: undefined;
-  Main: undefined;
+// Notifications stack navigator types
+export type NotificationsStackParamList = {
+  NotificationsList: undefined;
+  NotificationSettings: undefined;
 };

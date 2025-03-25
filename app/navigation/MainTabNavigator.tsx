@@ -1,72 +1,37 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { MainTabParamList } from "./types";
-import { useColorScheme, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../hooks/useTheme";
 
-// Import screens
-import HomeScreen from "../screens/meal/HomeScreen";
-import WeeklyMenuScreen from "../screens/meal/WeeklyMenuScreen";
+// Screens
+import HomeScreen from "../screens/home/HomeScreen";
+import WeeklyMenuScreen from "../screens/weekly-menu/WeeklyMenuScreen";
 import ProfileScreen from "../screens/profile/ProfileScreen";
-import NotificationsScreen from "../screens/notifications/NotificationsScreen";
+// import NotificationsScreen from "../screens/notifications/NotificationsScreen";
+import NotificationsNavigator from "./NotificationsNavigator";
 
-// Simple icons as placeholders (would be replaced with proper icons)
-const HomeIcon = ({ color }: { color: string }) => (
-  <View
-    style={{
-      width: 24,
-      height: 24,
-      alignItems: "center",
-      justifyContent: "center",
-    }}
-  >
-    <Text style={{ fontSize: 20, color }}>🏠</Text>
-  </View>
-);
+// Tab Bar Icons
+function HomeIcon({ color }: { color: string }) {
+  return <Ionicons name="home-outline" size={24} color={color} />;
+}
 
-const CalendarIcon = ({ color }: { color: string }) => (
-  <View
-    style={{
-      width: 24,
-      height: 24,
-      alignItems: "center",
-      justifyContent: "center",
-    }}
-  >
-    <Text style={{ fontSize: 20, color }}>📆</Text>
-  </View>
-);
+function CalendarIcon({ color }: { color: string }) {
+  return <Ionicons name="calendar-outline" size={24} color={color} />;
+}
 
-const ProfileIcon = ({ color }: { color: string }) => (
-  <View
-    style={{
-      width: 24,
-      height: 24,
-      alignItems: "center",
-      justifyContent: "center",
-    }}
-  >
-    <Text style={{ fontSize: 20, color }}>👤</Text>
-  </View>
-);
+function ProfileIcon({ color }: { color: string }) {
+  return <Ionicons name="person-outline" size={24} color={color} />;
+}
 
-const NotificationIcon = ({ color }: { color: string }) => (
-  <View
-    style={{
-      width: 24,
-      height: 24,
-      alignItems: "center",
-      justifyContent: "center",
-    }}
-  >
-    <Text style={{ fontSize: 20, color }}>🔔</Text>
-  </View>
-);
+function NotificationIcon({ color }: { color: string }) {
+  return <Ionicons name="notifications-outline" size={24} color={color} />;
+}
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabNavigator() {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
+  const { isDark } = useTheme();
 
   return (
     <Tab.Navigator
@@ -75,8 +40,8 @@ function MainTabNavigator() {
         tabBarActiveTintColor: "#4A6572",
         tabBarInactiveTintColor: "#999999",
         tabBarStyle: {
-          backgroundColor: isDarkMode ? "#1E1E1E" : "#FFFFFF",
-          borderTopColor: isDarkMode ? "#333333" : "#EEEEEE",
+          backgroundColor: isDark ? "#1E1E1E" : "#FFFFFF",
+          borderTopColor: isDark ? "#333333" : "#EEEEEE",
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -110,7 +75,7 @@ function MainTabNavigator() {
       />
       <Tab.Screen
         name="Notifications"
-        component={NotificationsScreen}
+        component={NotificationsNavigator}
         options={{
           tabBarLabel: "Bildirimler",
           tabBarIcon: ({ color }) => <NotificationIcon color={color} />,

@@ -9,8 +9,8 @@ import {
   useColorScheme,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -26,36 +26,44 @@ function RegisterScreen({ navigation }: RegisterScreenProps) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { signUp } = useAuth();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
+  const { signUp } = useAuth();
 
   const handleRegister = async () => {
     // Form validation
     if (!fullName || !email || !password || !confirmPassword) {
-      Alert.alert("Hata", "Lütfen tüm alanları doldurun.");
+      Alert.alert("Hata", "Lütfen tüm alanları doldurunuz.");
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert("Hata", "Lütfen geçerli bir e-posta adresi giriniz.");
+      return;
+    }
+
+    // Validate passwords match
     if (password !== confirmPassword) {
       Alert.alert("Hata", "Şifreler eşleşmiyor.");
       return;
     }
 
+    // Validate password length
     if (password.length < 6) {
-      Alert.alert("Hata", "Şifre en az 6 karakter olmalıdır.");
+      Alert.alert("Hata", "Şifre en az 6 karakter uzunluğunda olmalıdır.");
       return;
     }
 
-    setIsLoading(true);
     try {
-      const { error } = await signUp(email, password, fullName);
-      if (error) {
-        Alert.alert("Kayıt Başarısız", error.message);
-      } else {
+      setIsLoading(true);
+      const success = await signUp(email, password, { full_name: fullName });
+
+      if (success) {
         Alert.alert(
-          "Kayıt Başarılı",
-          "E-posta adresinize gönderilen bağlantıyı kullanarak hesabınızı doğrulayın.",
+          "Başarılı",
+          "Hesabınız oluşturuldu. Giriş yapabilirsiniz.",
           [
             {
               text: "Tamam",
@@ -63,10 +71,18 @@ function RegisterScreen({ navigation }: RegisterScreenProps) {
             },
           ]
         );
+      } else {
+        Alert.alert(
+          "Kayıt Başarısız",
+          "Hesap oluşturulurken bir hata oluştu. Lütfen tekrar deneyiniz."
+        );
       }
-    } catch (err) {
-      Alert.alert("Bir hata oluştu", "Lütfen tekrar deneyin.");
-      console.error("Registration error:", err);
+    } catch (error) {
+      Alert.alert(
+        "Hata",
+        "Kayıt olurken bir hata oluştu. Bu e-posta adresi zaten kullanılıyor olabilir."
+      );
+      console.error("Registration error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -135,13 +151,13 @@ function RegisterScreen({ navigation }: RegisterScreenProps) {
             <TouchableOpacity
               style={[
                 styles.registerButton,
-                isLoading && styles.disabledButton,
+                isLoading && styles.registerButtonDisabled,
               ]}
               onPress={handleRegister}
               disabled={isLoading}
             >
               {isLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
                 <Text style={styles.registerButtonText}>Kaydol</Text>
               )}
@@ -155,7 +171,11 @@ function RegisterScreen({ navigation }: RegisterScreenProps) {
                 onPress={() => navigation.navigate("Login")}
                 disabled={isLoading}
               >
-                <Text style={styles.loginLink}>Giriş Yap</Text>
+                <Text
+                  style={[styles.loginLink, isLoading && styles.disabledText]}
+                >
+                  Giriş Yap
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -217,8 +237,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  disabledButton: {
-    backgroundColor: "#7A96A2",
+  registerButtonDisabled: {
+    backgroundColor: "#A0ADB4",
   },
   registerButtonText: {
     color: "#FFFFFF",
@@ -239,6 +259,9 @@ const styles = StyleSheet.create({
     color: "#4A6572",
     fontSize: 14,
     fontWeight: "600",
+  },
+  disabledText: {
+    opacity: 0.5,
   },
 });
 

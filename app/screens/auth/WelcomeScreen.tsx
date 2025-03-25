@@ -1,46 +1,61 @@
 import React from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-  useColorScheme,
-} from "react-native";
+import { StyleSheet, Text, View, TouchableOpacity, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTheme } from "../../hooks/useTheme";
+import { AuthStackParamList } from "../../navigation/types";
+import { CommonActions } from "@react-navigation/native";
+
+type WelcomeScreenNavigationProp = StackNavigationProp<
+  AuthStackParamList,
+  "Welcome"
+>;
 
 interface WelcomeScreenProps {
-  navigation: StackNavigationProp<any>;
+  navigation: WelcomeScreenNavigationProp;
 }
 
 function WelcomeScreen({ navigation }: WelcomeScreenProps) {
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
+  const { isDark } = useTheme();
+
+  const handleLoginPress = () => {
+    console.log("Login button pressed, navigating to Login screen");
+    // Using commonActions for more reliable navigation
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: "Login",
+      })
+    );
+  };
+
+  const handleRegisterPress = () => {
+    console.log("Register button pressed, navigating to Register screen");
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: "Register",
+      })
+    );
+  };
 
   return (
-    <SafeAreaView
-      style={[styles.container, isDarkMode && styles.darkContainer]}
-    >
+    <SafeAreaView style={[styles.container, isDark && styles.darkContainer]}>
       <View style={styles.content}>
-        <Text style={[styles.title, isDarkMode && styles.darkText]}>
-          KYK Yemek
-        </Text>
-        <Text style={[styles.subtitle, isDarkMode && styles.darkText]}>
+        <Text style={[styles.title, isDark && styles.darkText]}>KYK Yemek</Text>
+        <Text style={[styles.subtitle, isDark && styles.darkText]}>
           Yurt yemeklerini kolayca takip edin ve hiçbir öğünü kaçırmayın!
         </Text>
 
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[styles.button, styles.primaryButton]}
-            onPress={() => navigation.navigate("Login")}
+            onPress={handleLoginPress}
           >
             <Text style={styles.buttonText}>Giriş Yap</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.button, styles.secondaryButton]}
-            onPress={() => navigation.navigate("Register")}
+            onPress={handleRegisterPress}
           >
             <Text style={[styles.buttonText, styles.secondaryButtonText]}>
               Kaydol
@@ -106,6 +121,10 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: "#4A6572",
+  },
+  configButton: {
+    backgroundColor: "#344955",
+    marginTop: 16,
   },
 });
 

@@ -5,10 +5,14 @@ import {
   View,
   FlatList,
   TouchableOpacity,
-  useColorScheme,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTheme } from "../../hooks/useTheme";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { NotificationsStackParamList } from "../../navigation/NotificationsNavigator";
 
 // Mock notification types
 type NotificationType = "MEAL_REMINDER" | "MENU_UPDATE" | "APP_UPDATE";
@@ -22,6 +26,12 @@ interface Notification {
   timestamp: string;
   isRead: boolean;
 }
+
+// Navigation type
+type NotificationsScreenNavigationProp = StackNavigationProp<
+  NotificationsStackParamList,
+  "NotificationsList"
+>;
 
 // Sample notifications data
 const MOCK_NOTIFICATIONS: Notification[] = [
@@ -66,8 +76,8 @@ const MOCK_NOTIFICATIONS: Notification[] = [
 function NotificationsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const colorScheme = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
+  const { isDark } = useTheme();
+  const navigation = useNavigation<NotificationsScreenNavigationProp>();
 
   useEffect(() => {
     // Simulate API loading
@@ -85,6 +95,10 @@ function NotificationsScreen() {
           : notification
       )
     );
+  };
+
+  const navigateToSettings = () => {
+    navigation.navigate("NotificationSettings");
   };
 
   const formatTimestamp = (timestamp: string): string => {
@@ -122,9 +136,9 @@ function NotificationsScreen() {
     <TouchableOpacity
       style={[
         styles.notificationItem,
-        isDarkMode && styles.darkNotificationItem,
+        isDark && styles.darkNotificationItem,
         !item.isRead && styles.unreadNotification,
-        !item.isRead && isDarkMode && styles.darkUnreadNotification,
+        !item.isRead && isDark && styles.darkUnreadNotification,
       ]}
       onPress={() => markAsRead(item.id)}
     >
@@ -133,17 +147,15 @@ function NotificationsScreen() {
       </View>
       <View style={styles.notificationContent}>
         <View style={styles.notificationHeader}>
-          <Text
-            style={[styles.notificationTitle, isDarkMode && styles.darkText]}
-          >
+          <Text style={[styles.notificationTitle, isDark && styles.darkText]}>
             {item.title}
           </Text>
-          <Text style={[styles.timestamp, isDarkMode && styles.darkTimestamp]}>
+          <Text style={[styles.timestamp, isDark && styles.darkTimestamp]}>
             {formatTimestamp(item.timestamp)}
           </Text>
         </View>
         <Text
-          style={[styles.notificationMessage, isDarkMode && styles.darkText]}
+          style={[styles.notificationMessage, isDark && styles.darkText]}
           numberOfLines={2}
         >
           {item.message}
@@ -155,7 +167,7 @@ function NotificationsScreen() {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
-      <Text style={[styles.emptyText, isDarkMode && styles.darkText]}>
+      <Text style={[styles.emptyText, isDark && styles.darkText]}>
         Bildiriminiz bulunmamaktadır.
       </Text>
     </View>
@@ -163,12 +175,10 @@ function NotificationsScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView
-        style={[styles.container, isDarkMode && styles.darkContainer]}
-      >
+      <SafeAreaView style={[styles.container, isDark && styles.darkContainer]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4A6572" />
-          <Text style={[styles.loadingText, isDarkMode && styles.darkText]}>
+          <Text style={[styles.loadingText, isDark && styles.darkText]}>
             Bildirimler yükleniyor...
           </Text>
         </View>
@@ -177,28 +187,38 @@ function NotificationsScreen() {
   }
 
   return (
-    <SafeAreaView
-      style={[styles.container, isDarkMode && styles.darkContainer]}
-    >
+    <SafeAreaView style={[styles.container, isDark && styles.darkContainer]}>
       <View style={styles.header}>
-        <Text style={[styles.title, isDarkMode && styles.darkText]}>
+        <Text style={[styles.title, isDark && styles.darkText]}>
           Bildirimler
         </Text>
-        {notifications.length > 0 && (
+        <View style={styles.headerButtons}>
+          {notifications.length > 0 && (
+            <TouchableOpacity
+              style={styles.markAllButton}
+              onPress={() => {
+                setNotifications((prevNotifications) =>
+                  prevNotifications.map((notification) => ({
+                    ...notification,
+                    isRead: true,
+                  }))
+                );
+              }}
+            >
+              <Text style={styles.markAllText}>Tümünü Okundu İşaretle</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
-            style={styles.markAllButton}
-            onPress={() => {
-              setNotifications((prevNotifications) =>
-                prevNotifications.map((notification) => ({
-                  ...notification,
-                  isRead: true,
-                }))
-              );
-            }}
+            style={styles.settingsButton}
+            onPress={navigateToSettings}
           >
-            <Text style={styles.markAllText}>Tümünü Okundu İşaretle</Text>
+            <Ionicons
+              name="settings-outline"
+              size={24}
+              color={isDark ? "#FFFFFF" : "#4A6572"}
+            />
           </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       <FlatList
@@ -245,6 +265,10 @@ const styles = StyleSheet.create({
   darkText: {
     color: "#FFFFFF",
   },
+  headerButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   markAllButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -254,16 +278,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "500",
   },
+  settingsButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
   listContent: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
+    paddingTop: 5,
     paddingBottom: 20,
-    flexGrow: 1,
   },
   notificationItem: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 15,
     marginBottom: 10,
     shadowColor: "#000",
     shadowOffset: {
@@ -273,24 +301,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    position: "relative",
   },
   darkNotificationItem: {
     backgroundColor: "#1E1E1E",
   },
   unreadNotification: {
-    backgroundColor: "#F1F7FB",
+    backgroundColor: "#F0F7FF",
   },
   darkUnreadNotification: {
-    backgroundColor: "#26323A",
+    backgroundColor: "#263238",
   },
   notificationIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#EBF2F7",
+    backgroundColor: "#F0F0F0",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 15,
   },
   iconText: {
     fontSize: 18,
@@ -301,8 +330,8 @@ const styles = StyleSheet.create({
   notificationHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 4,
+    alignItems: "center",
+    marginBottom: 5,
   },
   notificationTitle: {
     fontSize: 16,
@@ -312,11 +341,10 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 12,
-    color: "#888888",
-    marginLeft: 8,
+    color: "#999999",
   },
   darkTimestamp: {
-    color: "#AAAAAA",
+    color: "#777777",
   },
   notificationMessage: {
     fontSize: 14,
@@ -324,24 +352,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   unreadIndicator: {
+    position: "absolute",
+    top: 15,
+    right: 15,
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: "#4A6572",
-    position: "absolute",
-    top: 16,
-    right: 16,
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    paddingTop: 100,
+    justifyContent: "center",
+    paddingVertical: 50,
   },
   emptyText: {
     fontSize: 16,
-    color: "#888888",
-    textAlign: "center",
+    color: "#666666",
   },
 });
 

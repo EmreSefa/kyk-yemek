@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -16,6 +16,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useAuth } from "../../hooks/useAuth";
 import { useUserPreferences } from "../../hooks/useUserPreferences";
 import { useTheme } from "../../hooks/useTheme";
+import { CommonActions } from "@react-navigation/native";
 
 interface LoginScreenProps {
   navigation: StackNavigationProp<any>;
@@ -27,9 +28,41 @@ function LoginScreen({ navigation }: LoginScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
-  const { signIn } = useAuth();
-  const { selectedCityId, selectedUniversityId } = useUserPreferences();
+  const { signIn, isAuthenticated } = useAuth();
+  const { selectedCityId, selectedUniversityId, selectedDormId } =
+    useUserPreferences();
   const { isDark } = useTheme();
+
+  // Monitor authentication state changes and redirect if needed
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log("Auth state detected as authenticated in LoginScreen");
+      // Check if user has completed onboarding
+      if (selectedCityId && selectedDormId) {
+        console.log(
+          "LoginScreen: User has completed onboarding, navigating to Main"
+        );
+        // Use CommonActions to reset the navigation state to avoid stacking
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: "Main" }],
+          })
+        );
+      } else {
+        console.log(
+          "LoginScreen: User hasn't completed onboarding, navigating to Onboarding"
+        );
+        // Navigate to onboarding
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: "Onboarding" }],
+          })
+        );
+      }
+    }
+  }, [isAuthenticated, selectedCityId, selectedDormId, navigation]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -39,6 +72,7 @@ function LoginScreen({ navigation }: LoginScreenProps) {
 
     try {
       setIsLoading(true);
+      console.log("Attempting login with email:", email);
       const result = await signIn(email, password);
 
       console.log("Login result:", JSON.stringify(result, null, 2));
@@ -60,17 +94,7 @@ function LoginScreen({ navigation }: LoginScreenProps) {
         Alert.alert("Giriş Başarısız", errorMessage);
       } else {
         console.log("Login successful, user:", result.user?.email);
-
-        // Check if location selection is needed
-        if (selectedCityId === null) {
-          // Let the auth state update naturally
-          // The RootNavigator will automatically redirect to Onboarding
-          console.log(
-            "No city selected, letting RootNavigator handle navigation"
-          );
-          // DO NOT manually navigate here - let the app handle it
-        }
-        // Otherwise, Auth provider will automatically redirect to Main navigator
+        // Navigation will be handled by the useEffect hook when isAuthenticated becomes true
       }
     } catch (error) {
       Alert.alert(
