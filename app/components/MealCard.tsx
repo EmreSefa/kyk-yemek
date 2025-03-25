@@ -3,6 +3,7 @@ import React, { useState, useCallback } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useMeals, MealItem, Meal } from "../hooks/useMeals";
 import { useColorScheme } from "react-native";
+import { MealDetailModal } from "./MealDetailModal";
 
 // Helper function to get all meal items, checking all possible sources
 const getMealItems = (meal: Meal | null): MealItem[] => {
@@ -75,6 +76,7 @@ export function MealCard({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const [isRating, setIsRating] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Helper to get the meal type title in Turkish
   const getMealTypeTitle = () => {
@@ -97,6 +99,20 @@ export function MealCard({
     },
     [meal, isRating, onRateMeal]
   );
+
+  const handleCardPress = () => {
+    if (meal) {
+      setShowDetailModal(true);
+    }
+    // Also call the parent's onPress if provided
+    if (onPress) {
+      onPress();
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowDetailModal(false);
+  };
 
   // If loading, show placeholder
   if (isLoading) {
@@ -155,134 +171,152 @@ export function MealCard({
   const totalCalories = meal.totalCalories || getTotalCalories(mealItems);
 
   return (
-    <Pressable
-      style={[styles.card, isDark ? styles.cardDark : styles.cardLight]}
-      onPress={onPress}
-    >
-      <View style={styles.header}>
-        <Text
-          style={[styles.title, isDark ? styles.titleDark : styles.titleLight]}
-        >
-          {getMealTypeTitle()}
-        </Text>
-        <View style={styles.calorieContainer}>
-          <Ionicons
-            name="flame"
-            size={14}
-            color={isDark ? "#FF9500" : "#FF3B30"}
-          />
+    <>
+      <Pressable
+        style={[styles.card, isDark ? styles.cardDark : styles.cardLight]}
+        onPress={handleCardPress}
+      >
+        <View style={styles.header}>
           <Text
             style={[
-              styles.calories,
-              isDark ? styles.caloriesDark : styles.caloriesLight,
+              styles.title,
+              isDark ? styles.titleDark : styles.titleLight,
             ]}
           >
-            {totalCalories} kcal
+            {getMealTypeTitle()}
           </Text>
+          <View style={styles.calorieContainer}>
+            <Ionicons
+              name="flame"
+              size={14}
+              color={isDark ? "#FF9500" : "#FF3B30"}
+            />
+            <Text
+              style={[
+                styles.calories,
+                isDark ? styles.caloriesDark : styles.caloriesLight,
+              ]}
+            >
+              {totalCalories} kcal
+            </Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.content}>
-        {mealItems.length > 0 ? (
-          mealItems.map((item, index) => (
-            <View key={item.id || index} style={styles.menuItem}>
-              <Text
-                style={[
-                  styles.itemName,
-                  isDark ? styles.textDark : styles.textLight,
-                ]}
-              >
-                {item.item_name}
-              </Text>
-              {item.calories && (
+        <View style={styles.content}>
+          {mealItems.length > 0 ? (
+            mealItems.map((item, index) => (
+              <View key={item.id || index} style={styles.menuItem}>
                 <Text
                   style={[
-                    styles.itemCalories,
+                    styles.itemName,
                     isDark ? styles.textDark : styles.textLight,
                   ]}
                 >
-                  {item.calories} kcal
+                  {item.item_name}
                 </Text>
-              )}
-            </View>
-          ))
-        ) : (
-          <Text
-            style={[styles.noMenu, isDark ? styles.textDark : styles.textLight]}
-          >
-            Detaylı menü bilgisi bulunamadı.
-          </Text>
-        )}
-      </View>
+                {item.calories && (
+                  <Text
+                    style={[
+                      styles.itemCalories,
+                      isDark ? styles.textDark : styles.textLight,
+                    ]}
+                  >
+                    {item.calories} kcal
+                  </Text>
+                )}
+              </View>
+            ))
+          ) : (
+            <Text
+              style={[
+                styles.noMenu,
+                isDark ? styles.textDark : styles.textLight,
+              ]}
+            >
+              Detaylı menü bilgisi bulunamadı.
+            </Text>
+          )}
+        </View>
 
-      <View style={styles.footer}>
-        <Pressable
-          style={[
-            styles.ratingButton,
-            meal?.userRating === "like" && styles.ratingButtonActive,
-          ]}
-          disabled={isRating}
-          onPress={() => handleRate("like")}
-        >
-          <Ionicons
-            name={
-              meal?.userRating === "like" ? "thumbs-up" : "thumbs-up-outline"
-            }
-            size={16}
-            color={
-              meal?.userRating === "like"
-                ? "#34C759"
-                : isDark
-                ? "#FFFFFF"
-                : "#8E8E93"
-            }
-          />
-          <Text
+        <View style={styles.footer}>
+          <Pressable
             style={[
-              styles.ratingText,
-              isDark ? styles.ratingTextDark : styles.ratingTextLight,
-              meal?.userRating === "like" && styles.ratingTextActive,
+              styles.ratingButton,
+              meal?.userRating === "like" && styles.ratingButtonActive,
             ]}
+            disabled={isRating}
+            onPress={() => handleRate("like")}
           >
-            {meal?.likes || 0}
-          </Text>
-        </Pressable>
+            <Ionicons
+              name={
+                meal?.userRating === "like" ? "thumbs-up" : "thumbs-up-outline"
+              }
+              size={16}
+              color={
+                meal?.userRating === "like"
+                  ? "#34C759"
+                  : isDark
+                  ? "#FFFFFF"
+                  : "#8E8E93"
+              }
+            />
+            <Text
+              style={[
+                styles.ratingText,
+                isDark ? styles.ratingTextDark : styles.ratingTextLight,
+                meal?.userRating === "like" && styles.ratingTextActive,
+              ]}
+            >
+              {meal?.likes || 0}
+            </Text>
+          </Pressable>
 
-        <Pressable
-          style={[
-            styles.ratingButton,
-            meal?.userRating === "dislike" && styles.ratingButtonActive,
-          ]}
-          disabled={isRating}
-          onPress={() => handleRate("dislike")}
-        >
-          <Ionicons
-            name={
-              meal?.userRating === "dislike"
-                ? "thumbs-down"
-                : "thumbs-down-outline"
-            }
-            size={16}
-            color={
-              meal?.userRating === "dislike"
-                ? "#FF3B30"
-                : isDark
-                ? "#FFFFFF"
-                : "#8E8E93"
-            }
-          />
-          <Text
+          <Pressable
             style={[
-              styles.ratingText,
-              isDark ? styles.ratingTextDark : styles.ratingTextLight,
-              meal?.userRating === "dislike" && styles.ratingTextActive,
+              styles.ratingButton,
+              meal?.userRating === "dislike" && styles.ratingButtonActive,
             ]}
+            disabled={isRating}
+            onPress={() => handleRate("dislike")}
           >
-            {meal?.dislikes || 0}
-          </Text>
-        </Pressable>
-      </View>
-    </Pressable>
+            <Ionicons
+              name={
+                meal?.userRating === "dislike"
+                  ? "thumbs-down"
+                  : "thumbs-down-outline"
+              }
+              size={16}
+              color={
+                meal?.userRating === "dislike"
+                  ? "#FF3B30"
+                  : isDark
+                  ? "#FFFFFF"
+                  : "#8E8E93"
+              }
+            />
+            <Text
+              style={[
+                styles.ratingText,
+                isDark ? styles.ratingTextDark : styles.ratingTextLight,
+                meal?.userRating === "dislike" && styles.ratingTextActive,
+              ]}
+            >
+              {meal?.dislikes || 0}
+            </Text>
+          </Pressable>
+        </View>
+      </Pressable>
+
+      {/* Meal Detail Modal */}
+      {meal && (
+        <MealDetailModal
+          visible={showDetailModal}
+          mealId={meal.id}
+          mealType={meal.meal_type}
+          onClose={handleCloseModal}
+        />
+      )}
+    </>
   );
 }
 

@@ -25,7 +25,8 @@ export const mealService = {
   async getMealsByDateRange(
     startDate: string,
     endDate: string,
-    cityId?: number
+    cityId?: number,
+    userId?: string
   ) {
     let query = supabase
       .from("city_menus")
@@ -52,7 +53,7 @@ export const mealService = {
     if (error) throw error;
 
     // Process the menu_items_text field into an array of items
-    const processedMeals = data.map((meal: any) => {
+    let processedMeals = data.map((meal: any) => {
       let items: MealItem[] = [];
 
       if (meal.menu_items_text) {
@@ -106,8 +107,59 @@ export const mealService = {
         city_name: meal.cities ? meal.cities.city_name : null,
         city_id: meal.cities ? meal.cities.id : null,
         items,
+        likes: 0, // Default values, will be updated
+        dislikes: 0, // Default values, will be updated
+        userRating: null, // Default value, will be updated if userId provided
       };
     });
+
+    // If userId is provided, fetch the user's ratings for all these meals in a single query
+    if (userId) {
+      const mealIds = processedMeals.map((meal: any) => meal.id);
+
+      // Get the user's ratings for these meals
+      const { data: userRatings, error: ratingsError } = await supabase
+        .from("meal_ratings")
+        .select("meal_id, rating")
+        .eq("user_id", userId)
+        .in("meal_id", mealIds);
+
+      if (ratingsError) throw ratingsError;
+
+      // Create a map of meal_id to rating for quick lookup
+      const userRatingsMap: Record<number, "like" | "dislike"> = {};
+      if (userRatings) {
+        userRatings.forEach((rating: any) => {
+          userRatingsMap[rating.meal_id] = rating.rating as "like" | "dislike";
+        });
+      }
+
+      // Fetch like/dislike counts for all meals at once
+      const likeCountsPromises = mealIds.map(async (mealId: number) => {
+        const ratings = await this.getMealRatings(mealId);
+        return { mealId, ...ratings };
+      });
+
+      const likeCounts = await Promise.all(likeCountsPromises);
+      const likeCountsMap: Record<number, { likes: number; dislikes: number }> =
+        {};
+      likeCounts.forEach((item) => {
+        likeCountsMap[item.mealId] = {
+          likes: item.likes,
+          dislikes: item.dislikes,
+        };
+      });
+
+      // Update each meal with its ratings info
+      processedMeals = processedMeals.map((meal: any) => {
+        return {
+          ...meal,
+          likes: likeCountsMap[meal.id]?.likes || 0,
+          dislikes: likeCountsMap[meal.id]?.dislikes || 0,
+          userRating: userRatingsMap[meal.id] || null,
+        };
+      });
+    }
 
     return processedMeals;
   },
@@ -115,16 +167,21 @@ export const mealService = {
   /**
    * Get today's meals for a specific city
    */
-  async getTodayMeals(cityId: number) {
+  async getTodayMeals(cityId: number, userId?: string) {
     const today = new Date().toISOString().split("T")[0];
-    return this.getMealsByDateRange(today, today, cityId);
+    return this.getMealsByDateRange(today, today, cityId, userId);
   },
 
   /**
    * Get meals for the current week for a specific city
    */
-  async getWeeklyMeals(startDate: string, endDate: string, cityId: number) {
-    return this.getMealsByDateRange(startDate, endDate, cityId);
+  async getWeeklyMeals(
+    startDate: string,
+    endDate: string,
+    cityId: number,
+    userId?: string
+  ) {
+    return this.getMealsByDateRange(startDate, endDate, cityId, userId);
   },
 
   /**
@@ -227,5 +284,221 @@ export const mealService = {
       total_meals: count || 0,
       total_cities: citiesCount || 0,
     };
+  },
+
+  /**
+   * Rate a meal (like or dislike)
+   */
+  async rateMeal(
+    mealId: number,
+    userId: string,
+    rating: "like" | "dislike" | null
+  ) {
+    // Check if the user has already rated this meal
+    const { data: existingRating, error: fetchError } = await supabase
+      .from("meal_ratings")
+      .select("id, rating")
+      .eq("meal_id", mealId)
+      .eq("user_id", userId)
+      .single();
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      // PGRST116 is the error code for "no rows found", which is expected if user hasn't rated yet
+      throw fetchError;
+    }
+
+    // If user is toggling off their rating (clicking the same button again)
+    if (existingRating && existingRating.rating === rating) {
+      // Delete the rating
+      const { error: deleteError } = await supabase
+        .from("meal_ratings")
+        .delete()
+        .eq("id", existingRating.id);
+
+      if (deleteError) throw deleteError;
+
+      return null;
+    }
+
+    // If user has an existing rating but is changing it, or adding a new rating
+    if (existingRating) {
+      // Update the existing rating
+      const { error: updateError } = await supabase
+        .from("meal_ratings")
+        .update({ rating })
+        .eq("id", existingRating.id);
+
+      if (updateError) throw updateError;
+    } else if (rating) {
+      // Insert a new rating
+      const { error: insertError } = await supabase
+        .from("meal_ratings")
+        .insert({
+          meal_id: mealId,
+          user_id: userId,
+          rating,
+        });
+
+      if (insertError) throw insertError;
+    }
+
+    return rating;
+  },
+
+  /**
+   * Get ratings for a meal
+   */
+  async getMealRatings(mealId: number) {
+    // Get the count of likes
+    const { count: likeCount, error: likeError } = await supabase
+      .from("meal_ratings")
+      .select("*", { count: "exact" })
+      .eq("meal_id", mealId)
+      .eq("rating", "like");
+
+    if (likeError) throw likeError;
+
+    // Get the count of dislikes
+    const { count: dislikeCount, error: dislikeError } = await supabase
+      .from("meal_ratings")
+      .select("*", { count: "exact" })
+      .eq("meal_id", mealId)
+      .eq("rating", "dislike");
+
+    if (dislikeError) throw dislikeError;
+
+    return {
+      likes: likeCount || 0,
+      dislikes: dislikeCount || 0,
+    };
+  },
+
+  /**
+   * Get user's rating for a meal
+   */
+  async getUserMealRating(mealId: number, userId: string) {
+    const { data, error } = await supabase
+      .from("meal_ratings")
+      .select("rating")
+      .eq("meal_id", mealId)
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      throw error;
+    }
+
+    return data ? (data.rating as "like" | "dislike") : null;
+  },
+
+  /**
+   * Add a comment to a meal
+   */
+  async addComment(mealId: number, userId: string, comment: string) {
+    const { data, error } = await supabase
+      .from("meal_comments")
+      .insert({
+        meal_id: mealId,
+        user_id: userId,
+        comment,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Get all approved comments for a meal
+   */
+  async getMealComments(mealId: number, userId?: string) {
+    // Build the query
+    let query = supabase
+      .from("meal_comments")
+      .select(
+        `
+        id,
+        meal_id,
+        user_id,
+        comment,
+        is_approved,
+        created_at,
+        profiles:user_id(
+          display_name,
+          avatar_url
+        )
+      `
+      )
+      .eq("meal_id", mealId)
+      .order("created_at", { ascending: false });
+
+    // If no user ID is provided, only fetch approved comments
+    if (!userId) {
+      query = query.eq("is_approved", true);
+    } else {
+      // If user ID is provided, fetch approved comments and user's own unapproved comments
+      query = query.or(`is_approved.eq.true,user_id.eq.${userId}`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    // Transform the response to match the expected MealComment format
+    return data.map((item: any) => ({
+      id: item.id,
+      meal_id: item.meal_id,
+      user_id: item.user_id,
+      comment: item.comment,
+      is_approved: item.is_approved,
+      created_at: item.created_at,
+      profiles: item.profiles || { display_name: null, avatar_url: null },
+    }));
+  },
+
+  /**
+   * Update a comment
+   */
+  async updateComment(commentId: number, userId: string, comment: string) {
+    const { data, error } = await supabase
+      .from("meal_comments")
+      .update({ comment, updated_at: new Date().toISOString() })
+      .eq("id", commentId)
+      .eq("user_id", userId) // Ensure only the user can update their own comment
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Delete a comment
+   */
+  async deleteComment(commentId: number, userId: string) {
+    const { error } = await supabase
+      .from("meal_comments")
+      .delete()
+      .eq("id", commentId)
+      .eq("user_id", userId); // Ensure only the user can delete their own comment
+
+    if (error) throw error;
+    return true;
+  },
+
+  /**
+   * Admin only: Approve a comment
+   */
+  async approveComment(commentId: number, approved: boolean) {
+    const { data, error } = await supabase
+      .from("meal_comments")
+      .update({ is_approved: approved, updated_at: new Date().toISOString() })
+      .eq("id", commentId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
   },
 };

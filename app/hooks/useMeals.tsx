@@ -54,43 +54,30 @@ export const useMeals = () => {
   const [weeklyMeals, setWeeklyMeals] = useState<DailyMeals[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [userRatings, setUserRatings] = useState<
-    Record<number, "like" | "dislike">
-  >({});
 
-  // Load user ratings from storage
-  useEffect(() => {
-    const loadUserRatings = async () => {
-      if (!user) return;
-
-      try {
-        const ratingsJson = await AsyncStorage.getItem(
-          `menu_ratings_${user.id}`
-        );
-        if (ratingsJson) {
-          setUserRatings(JSON.parse(ratingsJson));
-        }
-      } catch (err) {
-        console.error("Failed to load menu ratings:", err);
-      }
-    };
-
-    loadUserRatings();
-  }, [user]);
-
-  // Function to save user ratings
-  const saveUserRatings = async (
-    newRatings: Record<number, "like" | "dislike">
-  ) => {
-    if (!user) return;
+  // Function to fetch a meal's ratings
+  const fetchMealRatings = async (meal: Meal): Promise<Meal> => {
+    if (!meal) return meal;
 
     try {
-      await AsyncStorage.setItem(
-        `menu_ratings_${user.id}`,
-        JSON.stringify(newRatings)
-      );
-    } catch (err) {
-      console.error("Failed to save menu ratings:", err);
+      // Get the meal's like/dislike counts
+      const ratings = await mealService.getMealRatings(meal.id);
+
+      // Get the user's rating for this meal if they're logged in
+      let userRating = null;
+      if (user) {
+        userRating = await mealService.getUserMealRating(meal.id, user.id);
+      }
+
+      return {
+        ...meal,
+        likes: ratings.likes,
+        dislikes: ratings.dislikes,
+        userRating,
+      };
+    } catch (error) {
+      console.error("Error fetching meal ratings:", error);
+      return meal;
     }
   };
 
@@ -99,121 +86,62 @@ export const useMeals = () => {
     if (!user) return false;
 
     try {
-      // Check if user already rated this meal
-      const currentRating = userRatings[mealId];
-      let newRatings = { ...userRatings };
+      // Call the backend service to rate the meal
+      const newRating = await mealService.rateMeal(mealId, user.id, rating);
 
-      if (currentRating === rating) {
-        // User is toggling off their rating
-        delete newRatings[mealId];
-      } else {
-        // User is setting or changing their rating
-        newRatings[mealId] = rating;
-      }
+      // Get fresh ratings for this meal
+      const ratings = await mealService.getMealRatings(mealId);
 
-      // Update state
-      setUserRatings(newRatings);
+      // Update the meal in todayMeals state if it exists there
+      setTodayMeals((current) => {
+        const updated = { ...current };
 
-      // Save ratings to AsyncStorage
-      await saveUserRatings(newRatings);
-
-      // Update any relevant meals in state
-      setTodayMeals((prev) => {
-        const updatedMeals = { ...prev };
-
-        if (updatedMeals.breakfast && updatedMeals.breakfast.id === mealId) {
-          updatedMeals.breakfast = {
-            ...updatedMeals.breakfast,
-            userRating: newRatings[mealId] || null,
-            likes:
-              (updatedMeals.breakfast.likes || 0) +
-              (currentRating !== "like" && newRatings[mealId] === "like"
-                ? 1
-                : currentRating === "like" && !newRatings[mealId]
-                ? -1
-                : 0),
-            dislikes:
-              (updatedMeals.breakfast.dislikes || 0) +
-              (currentRating !== "dislike" && newRatings[mealId] === "dislike"
-                ? 1
-                : currentRating === "dislike" && !newRatings[mealId]
-                ? -1
-                : 0),
+        if (updated.breakfast && updated.breakfast.id === mealId) {
+          updated.breakfast = {
+            ...updated.breakfast,
+            likes: ratings.likes,
+            dislikes: ratings.dislikes,
+            userRating: newRating,
           };
         }
 
-        if (updatedMeals.dinner && updatedMeals.dinner.id === mealId) {
-          updatedMeals.dinner = {
-            ...updatedMeals.dinner,
-            userRating: newRatings[mealId] || null,
-            likes:
-              (updatedMeals.dinner.likes || 0) +
-              (currentRating !== "like" && newRatings[mealId] === "like"
-                ? 1
-                : currentRating === "like" && !newRatings[mealId]
-                ? -1
-                : 0),
-            dislikes:
-              (updatedMeals.dinner.dislikes || 0) +
-              (currentRating !== "dislike" && newRatings[mealId] === "dislike"
-                ? 1
-                : currentRating === "dislike" && !newRatings[mealId]
-                ? -1
-                : 0),
+        if (updated.dinner && updated.dinner.id === mealId) {
+          updated.dinner = {
+            ...updated.dinner,
+            likes: ratings.likes,
+            dislikes: ratings.dislikes,
+            userRating: newRating,
           };
         }
 
-        return updatedMeals;
+        return updated;
       });
 
-      setWeeklyMeals((prev) => {
-        return prev.map((dailyMeal) => {
-          const updatedDaily = { ...dailyMeal };
+      // Update the meal in weeklyMeals if it exists there
+      setWeeklyMeals((current) => {
+        const updated = [...current];
 
-          if (updatedDaily.breakfast && updatedDaily.breakfast.id === mealId) {
-            updatedDaily.breakfast = {
-              ...updatedDaily.breakfast,
-              userRating: newRatings[mealId] || null,
-              likes:
-                (updatedDaily.breakfast.likes || 0) +
-                (currentRating !== "like" && newRatings[mealId] === "like"
-                  ? 1
-                  : currentRating === "like" && !newRatings[mealId]
-                  ? -1
-                  : 0),
-              dislikes:
-                (updatedDaily.breakfast.dislikes || 0) +
-                (currentRating !== "dislike" && newRatings[mealId] === "dislike"
-                  ? 1
-                  : currentRating === "dislike" && !newRatings[mealId]
-                  ? -1
-                  : 0),
+        updated.forEach((dailyMeal, index) => {
+          if (dailyMeal.breakfast && dailyMeal.breakfast.id === mealId) {
+            updated[index].breakfast = {
+              ...updated[index].breakfast!,
+              likes: ratings.likes,
+              dislikes: ratings.dislikes,
+              userRating: newRating,
             };
           }
 
-          if (updatedDaily.dinner && updatedDaily.dinner.id === mealId) {
-            updatedDaily.dinner = {
-              ...updatedDaily.dinner,
-              userRating: newRatings[mealId] || null,
-              likes:
-                (updatedDaily.dinner.likes || 0) +
-                (currentRating !== "like" && newRatings[mealId] === "like"
-                  ? 1
-                  : currentRating === "like" && !newRatings[mealId]
-                  ? -1
-                  : 0),
-              dislikes:
-                (updatedDaily.dinner.dislikes || 0) +
-                (currentRating !== "dislike" && newRatings[mealId] === "dislike"
-                  ? 1
-                  : currentRating === "dislike" && !newRatings[mealId]
-                  ? -1
-                  : 0),
+          if (dailyMeal.dinner && dailyMeal.dinner.id === mealId) {
+            updated[index].dinner = {
+              ...updated[index].dinner!,
+              likes: ratings.likes,
+              dislikes: ratings.dislikes,
+              userRating: newRating,
             };
           }
-
-          return updatedDaily;
         });
+
+        return updated;
       });
 
       return true;
@@ -225,7 +153,7 @@ export const useMeals = () => {
 
   // Prepare meal data with proper structure
   const processMeal = useCallback(
-    (meal: any): Meal => {
+    async (meal: any): Promise<Meal> => {
       // Calculate total calories from items
       const totalCalories =
         meal.items?.reduce(
@@ -233,19 +161,21 @@ export const useMeals = () => {
           0
         ) || 0;
 
-      return {
+      const processedMeal = {
         ...meal,
         meal_type: meal.meal_type as "BREAKFAST" | "DINNER",
-        // Add default likes/dislikes for UI
-        likes: Math.floor(Math.random() * 30) + 5, // Random values for demonstration
-        dislikes: Math.floor(Math.random() * 10),
-        userRating: userRatings[meal.id] || null,
         totalCalories,
         // Keep meal_items compatible with the existing structure
         meal_items: meal.items || [],
+        // Ratings are now included directly from the API
+        likes: meal.likes || 0,
+        dislikes: meal.dislikes || 0,
+        userRating: meal.userRating || null,
       };
+
+      return processedMeal;
     },
-    [userRatings]
+    [user]
   );
 
   // Fetch today's meals
@@ -260,16 +190,24 @@ export const useMeals = () => {
     setError(null);
 
     try {
-      // Only pass cityId, not dormId since there's no relationship
-      const meals = await mealService.getTodayMeals(selectedCityId);
+      // Pass the user ID to get their ratings in the same query
+      const meals = await mealService.getTodayMeals(
+        selectedCityId,
+        user ? user.id : undefined
+      );
 
       // Process meals for today
       const breakfast = meals.find((m: any) => m.meal_type === "BREAKFAST");
       const dinner = meals.find((m: any) => m.meal_type === "DINNER");
 
+      const processedBreakfast = breakfast
+        ? await processMeal(breakfast)
+        : null;
+      const processedDinner = dinner ? await processMeal(dinner) : null;
+
       setTodayMeals({
-        breakfast: breakfast ? processMeal(breakfast) : null,
-        dinner: dinner ? processMeal(dinner) : null,
+        breakfast: processedBreakfast,
+        dinner: processedDinner,
       });
     } catch (err) {
       console.error("Error fetching today's meals:", err);
@@ -277,7 +215,7 @@ export const useMeals = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCityId, processMeal]);
+  }, [selectedCityId, processMeal, user]);
 
   // Fetch weekly meals
   const fetchWeeklyMeals = useCallback(async () => {
@@ -299,11 +237,12 @@ export const useMeals = () => {
       const startDateStr = format(startDate, "yyyy-MM-dd");
       const endDateStr = format(endDate, "yyyy-MM-dd");
 
-      // Fetch meals from service - only pass cityId, not dormId
+      // Fetch meals from service with user ID
       const meals = await mealService.getWeeklyMeals(
         startDateStr,
         endDateStr,
-        selectedCityId
+        selectedCityId,
+        user ? user.id : undefined
       );
 
       // Process into daily structure
@@ -327,8 +266,8 @@ export const useMeals = () => {
           date,
           formatted_date: format(date, "d MMMM", { locale: tr }),
           day_name: format(date, "EEEE", { locale: tr }),
-          breakfast: dayBreakfast ? processMeal(dayBreakfast) : null,
-          dinner: dayDinner ? processMeal(dayDinner) : null,
+          breakfast: dayBreakfast ? await processMeal(dayBreakfast) : null,
+          dinner: dayDinner ? await processMeal(dayDinner) : null,
         });
       }
 
@@ -339,7 +278,7 @@ export const useMeals = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedCityId, processMeal]);
+  }, [selectedCityId, processMeal, user]);
 
   // Fetch meals when city or dorm changes
   useEffect(() => {
