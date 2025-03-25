@@ -1,210 +1,198 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  StyleSheet,
-  Text,
   View,
+  Text,
+  StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
-  FlatList,
-  Image,
-  Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useMeals, DailyMeals, MealItem } from "../../hooks/useMeals";
+import { useMeals, DailyMeals } from "../../hooks/useMeals";
+import { useTheme } from "../../hooks/useTheme";
+import { MealCard } from "../../components/MealCard";
 import { useUserPreferences } from "../../hooks/useUserPreferences";
 
-const { width } = Dimensions.get("window");
-
 function WeeklyMenuScreen() {
-  const { selectedCityId } = useUserPreferences();
-  const { weeklyMeals, isLoading, error, fetchWeeklyMeals, isToday } =
+  const { isDark } = useTheme();
+  const { selectedCityId, forceRefreshPreferences } = useUserPreferences();
+
+  const { weeklyMeals, isLoading, error, fetchWeeklyMeals, isToday, rateMeal } =
     useMeals();
+
+  // Selected day state
+  const [selectedDay, setSelectedDay] = useState<DailyMeals | null>(null);
+
+  // Refresh weekly meals
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-  const daysListRef = useRef<FlatList>(null);
-
-  useEffect(() => {
-    if (selectedCityId) {
-      fetchWeeklyMeals();
-    }
-  }, [selectedCityId]);
-
-  useEffect(() => {
-    // Find today's index to select it by default
-    const todayIndex = weeklyMeals.findIndex((day) => isToday(day.date));
-    if (todayIndex !== -1) {
-      setSelectedDayIndex(todayIndex);
-      // Scroll to today in the day selector
-      setTimeout(() => {
-        daysListRef.current?.scrollToIndex({
-          index: todayIndex,
-          animated: true,
-          viewPosition: 0.5,
-        });
-      }, 500);
-    }
-  }, [weeklyMeals]);
-
   const onRefresh = async () => {
     setRefreshing(true);
+    // Force refresh user preferences first
+    await forceRefreshPreferences();
     await fetchWeeklyMeals();
     setRefreshing(false);
   };
 
-  const renderDayItem = ({
-    item,
-    index,
-  }: {
-    item: DailyMeals;
-    index: number;
-  }) => {
-    const isSelected = index === selectedDayIndex;
-    const isTodayHighlight = isToday(item.date);
+  // Fetch weekly meals on mount
+  useEffect(() => {
+    const init = async () => {
+      // Force refresh preferences before fetching meals
+      const preferences = await forceRefreshPreferences();
+      console.log("Initial user preferences in WeeklyMenuScreen:", preferences);
+      fetchWeeklyMeals();
+
+      // If we don't have a city ID, set up a delayed retry
+      if (!preferences?.cityId) {
+        console.log("No city ID detected, setting up delayed retry...");
+        const timeoutId = setTimeout(async () => {
+          console.log("Executing delayed retry for menu load");
+          const retryPrefs = await forceRefreshPreferences();
+          console.log("Retry preferences:", retryPrefs);
+          if (retryPrefs?.cityId) {
+            console.log("City ID found in retry, loading weekly meals");
+            fetchWeeklyMeals();
+          }
+        }, 2000);
+
+        return () => clearTimeout(timeoutId);
+      }
+    };
+    init();
+  }, []);
+
+  // Set current day as selected when weekly meals load
+  useEffect(() => {
+    if (weeklyMeals && weeklyMeals.length > 0) {
+      // Find today or default to first day
+      const today =
+        weeklyMeals.find((day) => isToday(day.date)) || weeklyMeals[0];
+      setSelectedDay(today);
+    }
+  }, [weeklyMeals, isToday]);
+
+  // Handle day selection
+  const handleDaySelect = (day: DailyMeals) => {
+    setSelectedDay(day);
+  };
+
+  // Render day selector button
+  const renderDayButton = (day: DailyMeals) => {
+    const isSelected =
+      selectedDay?.date.toDateString() === day.date.toDateString();
+    const isCurrentDay = isToday(day.date);
 
     return (
       <TouchableOpacity
+        key={day.formatted_date}
         style={[
-          styles.dayItem,
-          isSelected && styles.selectedDayItem,
-          isTodayHighlight && styles.todayDayItem,
+          styles.dayButton,
+          isSelected && styles.selectedDayButton,
+          isDark && styles.darkDayButton,
+          isDark && isSelected && styles.darkSelectedDayButton,
+          isCurrentDay && styles.todayButton,
+          isDark && isCurrentDay && styles.darkTodayButton,
         ]}
-        onPress={() => setSelectedDayIndex(index)}
+        onPress={() => handleDaySelect(day)}
       >
         <Text
           style={[
             styles.dayName,
             isSelected && styles.selectedDayText,
-            isTodayHighlight && styles.todayDayText,
+            isDark && styles.darkText,
+            isDark && isSelected && styles.darkSelectedDayText,
           ]}
         >
-          {item.day_name.substring(0, 3)}
+          {day.day_name.slice(0, 3)}
         </Text>
         <Text
           style={[
             styles.dayDate,
             isSelected && styles.selectedDayText,
-            isTodayHighlight && styles.todayDayText,
+            isDark && styles.darkMutedText,
+            isDark && isSelected && styles.darkSelectedDayText,
           ]}
         >
-          {item.formatted_date.split(" ")[0]}
+          {day.formatted_date.split(" ")[0]}
         </Text>
       </TouchableOpacity>
     );
   };
 
-  const renderMealItem = (item: MealItem) => (
-    <View key={item.id} style={styles.mealItem}>
-      <Text style={styles.mealItemName}>{item.item_name}</Text>
-      {item.calories && (
-        <Text style={styles.mealItemCalories}>{item.calories} kcal</Text>
-      )}
-      {item.description && (
-        <Text style={styles.mealItemDescription}>{item.description}</Text>
-      )}
-    </View>
-  );
-
-  const renderMealSection = (
-    title: string,
-    mealItems: MealItem[] | null,
-    emptyMessage: string
-  ) => (
-    <View style={styles.mealSection}>
-      <Text style={styles.mealSectionTitle}>{title}</Text>
-      {mealItems && mealItems.length > 0 ? (
-        <View style={styles.mealItemsContainer}>
-          {mealItems.map((item) => renderMealItem(item))}
-        </View>
-      ) : (
-        <View style={styles.emptyMealContainer}>
-          <Image
-            source={require("../../../assets/icons/empty-plate.png")}
-            style={styles.emptyIcon}
-          />
-          <Text style={styles.emptyText}>{emptyMessage}</Text>
-        </View>
-      )}
-    </View>
-  );
-
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Haftalık Menü</Text>
-      </View>
+    <SafeAreaView
+      style={[styles.container, isDark && styles.darkContainer]}
+      edges={["top"]}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <Text style={[styles.title, isDark && styles.darkText]}>
+          Haftalık Menü
+        </Text>
 
-      {!selectedCityId ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Lütfen önce şehir ve yurt seçin</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => console.log("Navigate to Profile")}
-          >
-            <Text style={styles.retryButtonText}>Profil Sayfasına Git</Text>
-          </TouchableOpacity>
-        </View>
-      ) : isLoading && !refreshing ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4A6572" />
-          <Text style={styles.loadingText}>Yemek menüsü yükleniyor...</Text>
-        </View>
-      ) : error ? (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={fetchWeeklyMeals}
-          >
-            <Text style={styles.retryButtonText}>Tekrar Dene</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <>
-          <View style={styles.daysContainer}>
-            <FlatList
-              ref={daysListRef}
-              data={weeklyMeals}
-              renderItem={renderDayItem}
-              keyExtractor={(item, index) => `day-${index}`}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.daysList}
-              onScrollToIndexFailed={() => {}}
+        {/* Days of the week selector */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.daysContainer}
+        >
+          {weeklyMeals.map(renderDayButton)}
+        </ScrollView>
+
+        {/* Loading state */}
+        {isLoading && !refreshing && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator
+              size="large"
+              color={isDark ? "#4A8CFF" : "#4A6572"}
+            />
+            <Text style={[styles.loadingText, isDark && styles.darkMutedText]}>
+              Yemek menüsü yükleniyor...
+            </Text>
+          </View>
+        )}
+
+        {/* Error message */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={fetchWeeklyMeals}
+            >
+              <Text style={styles.retryText}>Yeniden Dene</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Selected day meals */}
+        {!isLoading && selectedDay && (
+          <View style={styles.selectedDayContainer}>
+            <Text style={[styles.selectedDayTitle, isDark && styles.darkText]}>
+              {selectedDay.formatted_date}{" "}
+              {isToday(selectedDay.date) && "(Bugün)"}
+            </Text>
+
+            {/* Breakfast */}
+            <MealCard
+              meal={selectedDay.breakfast}
+              mealType="BREAKFAST"
+              onRateMeal={rateMeal}
+            />
+
+            {/* Dinner */}
+            <MealCard
+              meal={selectedDay.dinner}
+              mealType="DINNER"
+              onRateMeal={rateMeal}
             />
           </View>
-
-          <ScrollView
-            style={styles.contentContainer}
-            contentContainerStyle={styles.scrollContent}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          >
-            {weeklyMeals.length > 0 &&
-              selectedDayIndex < weeklyMeals.length && (
-                <View>
-                  <Text style={styles.selectedDate}>
-                    {weeklyMeals[selectedDayIndex].formatted_date}
-                  </Text>
-
-                  {renderMealSection(
-                    "Kahvaltı",
-                    weeklyMeals[selectedDayIndex].breakfast?.meal_items || null,
-                    "Bu gün için kahvaltı menüsü bulunamadı."
-                  )}
-
-                  {renderMealSection(
-                    "Akşam Yemeği",
-                    weeklyMeals[selectedDayIndex].dinner?.meal_items || null,
-                    "Bu gün için akşam yemeği menüsü bulunamadı."
-                  )}
-                </View>
-              )}
-          </ScrollView>
-        </>
-      )}
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -212,168 +200,119 @@ function WeeklyMenuScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F7F9FB",
+    backgroundColor: "#F7F9FC",
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333333",
-  },
-  daysContainer: {
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  daysList: {
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-  },
-  dayItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: "#F0F0F0",
-    minWidth: 60,
-  },
-  selectedDayItem: {
-    backgroundColor: "#4A6572",
-  },
-  todayDayItem: {
-    borderWidth: 1,
-    borderColor: "#F44336",
-  },
-  dayName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#666666",
-    textTransform: "capitalize",
-  },
-  dayDate: {
-    fontSize: 14,
-    color: "#666666",
-    marginTop: 4,
-  },
-  selectedDayText: {
-    color: "#FFFFFF",
-  },
-  todayDayText: {
-    fontWeight: "bold",
-  },
-  contentContainer: {
-    flex: 1,
+  darkContainer: {
+    backgroundColor: "#121212",
   },
   scrollContent: {
     padding: 16,
   },
-  selectedDate: {
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+  },
+  daysContainer: {
+    flexDirection: "row",
+    marginBottom: 24,
+    paddingBottom: 8,
+  },
+  dayButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginRight: 10,
+    backgroundColor: "#FFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 70,
+  },
+  darkDayButton: {
+    backgroundColor: "#1E1E1E",
+  },
+  selectedDayButton: {
+    backgroundColor: "#4A6572",
+  },
+  darkSelectedDayButton: {
+    backgroundColor: "#2C4251",
+  },
+  todayButton: {
+    borderWidth: 2,
+    borderColor: "#FF6B00",
+  },
+  darkTodayButton: {
+    borderColor: "#FF9500",
+  },
+  dayName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+    textTransform: "capitalize",
+  },
+  dayDate: {
+    fontSize: 14,
+    color: "#666",
+  },
+  selectedDayText: {
+    color: "#FFF",
+  },
+  selectedDayContainer: {
+    marginBottom: 24,
+  },
+  selectedDayTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#333333",
+    color: "#333",
     marginBottom: 16,
-    textAlign: "center",
   },
   loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    justifyContent: "center",
+    padding: 32,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
-    color: "#666666",
+    color: "#666",
   },
   errorContainer: {
-    flex: 1,
-    justifyContent: "center",
+    backgroundColor: "#FEEAE9",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
     alignItems: "center",
-    padding: 24,
   },
   errorText: {
-    fontSize: 16,
     color: "#D32F2F",
-    textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   retryButton: {
-    backgroundColor: "#4A6572",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+    backgroundColor: "#D32F2F",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
   },
-  retryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  retryText: {
+    color: "#FFF",
     fontWeight: "500",
   },
-  mealSection: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  // Dark mode styles
+  darkText: {
+    color: "#F5F5F5",
   },
-  mealSectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333333",
-    marginBottom: 16,
+  darkMutedText: {
+    color: "#999",
   },
-  mealItemsContainer: {
-    gap: 12,
-  },
-  mealItem: {
-    padding: 12,
-    backgroundColor: "#F7F9FB",
-    borderRadius: 8,
-  },
-  mealItemName: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333333",
-    marginBottom: 4,
-  },
-  mealItemCalories: {
-    fontSize: 14,
-    color: "#4A6572",
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  mealItemDescription: {
-    fontSize: 14,
-    color: "#666666",
-  },
-  emptyMealContainer: {
-    alignItems: "center",
-    padding: 24,
-  },
-  emptyIcon: {
-    width: 80,
-    height: 80,
-    marginBottom: 16,
-    opacity: 0.5,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: "#999999",
-    textAlign: "center",
+  darkSelectedDayText: {
+    color: "#FFF",
   },
 });
 

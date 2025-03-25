@@ -8,12 +8,14 @@ import {
   useColorScheme,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useAuth } from "../../hooks/useAuth";
+import { useUserPreferences } from "../../hooks/useUserPreferences";
+import { useTheme } from "../../hooks/useTheme";
 
 interface LoginScreenProps {
   navigation: StackNavigationProp<any>;
@@ -23,25 +25,59 @@ function LoginScreen({ navigation }: LoginScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn } = useAuth();
   const colorScheme = useColorScheme();
   const isDarkMode = colorScheme === "dark";
+  const { signIn } = useAuth();
+  const { selectedCityId, selectedUniversityId } = useUserPreferences();
+  const { isDark } = useTheme();
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Hata", "Lütfen e-posta ve şifre alanlarını doldurun.");
+      Alert.alert("Hata", "Lütfen e-posta ve şifre alanlarını doldurunuz.");
       return;
     }
 
-    setIsLoading(true);
     try {
-      const { error } = await signIn(email, password);
-      if (error) {
-        Alert.alert("Giriş Başarısız", error.message);
+      setIsLoading(true);
+      const result = await signIn(email, password);
+
+      console.log("Login result:", JSON.stringify(result, null, 2));
+
+      if (!result.success) {
+        console.log("Login failed:", result.message);
+        let errorMessage = "E-posta veya şifre hatalı.";
+
+        // Check for specific error messages from Supabase
+        if (result.message) {
+          if (result.message.includes("Invalid login")) {
+            errorMessage = "E-posta veya şifreniz yanlış.";
+          } else if (result.message.includes("Email not confirmed")) {
+            errorMessage =
+              "E-posta adresinizi doğrulamanız gerekiyor. Lütfen gelen kutunuzu kontrol edin.";
+          }
+        }
+
+        Alert.alert("Giriş Başarısız", errorMessage);
+      } else {
+        console.log("Login successful, user:", result.user?.email);
+
+        // Check if location selection is needed
+        if (selectedCityId === null) {
+          // Let the auth state update naturally
+          // The RootNavigator will automatically redirect to Onboarding
+          console.log(
+            "No city selected, letting RootNavigator handle navigation"
+          );
+          // DO NOT manually navigate here - let the app handle it
+        }
+        // Otherwise, Auth provider will automatically redirect to Main navigator
       }
-    } catch (err) {
-      Alert.alert("Bir hata oluştu", "Lütfen tekrar deneyin.");
-      console.error("Login error:", err);
+    } catch (error) {
+      Alert.alert(
+        "Hata",
+        "Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyiniz."
+      );
+      console.error("Login error:", error);
     } finally {
       setIsLoading(false);
     }
@@ -89,19 +125,26 @@ function LoginScreen({ navigation }: LoginScreenProps) {
             disabled={isLoading}
           >
             <Text
-              style={[styles.forgotPasswordText, isDarkMode && styles.darkText]}
+              style={[
+                styles.forgotPasswordText,
+                isDarkMode && styles.darkText,
+                isLoading && styles.disabledText,
+              ]}
             >
               Şifremi unuttum
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.disabledButton]}
+            style={[
+              styles.loginButton,
+              isLoading && styles.loginButtonDisabled,
+            ]}
             onPress={handleLogin}
             disabled={isLoading}
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <Text style={styles.loginButtonText}>Giriş Yap</Text>
             )}
@@ -115,7 +158,11 @@ function LoginScreen({ navigation }: LoginScreenProps) {
               onPress={() => navigation.navigate("Register")}
               disabled={isLoading}
             >
-              <Text style={styles.signupLink}>Kaydol</Text>
+              <Text
+                style={[styles.signupLink, isLoading && styles.disabledText]}
+              >
+                Kaydol
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -180,8 +227,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  disabledButton: {
-    backgroundColor: "#7A96A2",
+  loginButtonDisabled: {
+    backgroundColor: "#A0ADB4",
   },
   loginButtonText: {
     color: "#FFFFFF",
@@ -202,6 +249,9 @@ const styles = StyleSheet.create({
     color: "#4A6572",
     fontSize: 14,
     fontWeight: "600",
+  },
+  disabledText: {
+    opacity: 0.5,
   },
 });
 
