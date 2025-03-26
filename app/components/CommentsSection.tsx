@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Platform,
   useColorScheme,
   ScrollView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../hooks/useAuth";
@@ -121,6 +123,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { user } = useAuth();
+  const inputRef = useRef<TextInput>(null);
   const {
     comments,
     isLoading,
@@ -146,6 +149,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
     const success = await addComment(newComment);
     if (success) {
       setNewComment("");
+      Keyboard.dismiss();
     }
   };
 
@@ -164,10 +168,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <View style={styles.headerContainer}>
         <Text
           style={[
@@ -211,7 +212,10 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
           Henüz yorum yapılmamış. İlk yorumu siz yapın!
         </Text>
       ) : (
-        <ScrollView contentContainerStyle={styles.commentsList}>
+        <ScrollView
+          contentContainerStyle={styles.commentsList}
+          keyboardShouldPersistTaps="handled"
+        >
           {comments.map((item) => (
             <CommentItem
               key={item.id.toString()}
@@ -224,37 +228,48 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
       )}
 
       {/* Comment input area */}
-      <View
-        style={[
-          styles.inputContainer,
-          isDark ? styles.inputContainerDark : styles.inputContainerLight,
-        ]}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
       >
-        <TextInput
-          style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
-          value={newComment}
-          onChangeText={setNewComment}
-          placeholder="Bir yorum yazın..."
-          placeholderTextColor={isDark ? "#AAAAAA" : "#999999"}
-          multiline
-        />
-        <Pressable
+        <View
           style={[
-            styles.sendButton,
-            isDark ? styles.sendButtonDark : styles.sendButtonLight,
-            (!newComment.trim() || isSubmitting) && styles.disabledButton,
+            styles.inputContainer,
+            isDark ? styles.inputContainerDark : styles.inputContainerLight,
           ]}
-          onPress={handleAddComment}
-          disabled={!newComment.trim() || isSubmitting}
         >
-          {isSubmitting ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Ionicons name="send" size={20} color="#FFFFFF" />
-          )}
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+          <TextInput
+            ref={inputRef}
+            style={[
+              styles.input,
+              isDark ? styles.inputDark : styles.inputLight,
+            ]}
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder="Bir yorum yazın..."
+            placeholderTextColor={isDark ? "#AAAAAA" : "#999999"}
+            multiline
+            returnKeyType="default"
+            blurOnSubmit={false}
+          />
+          <Pressable
+            style={[
+              styles.sendButton,
+              isDark ? styles.sendButtonDark : styles.sendButtonLight,
+              (!newComment.trim() || isSubmitting) && styles.disabledButton,
+            ]}
+            onPress={handleAddComment}
+            disabled={!newComment.trim() || isSubmitting}
+          >
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="send" size={20} color="#FFFFFF" />
+            )}
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 

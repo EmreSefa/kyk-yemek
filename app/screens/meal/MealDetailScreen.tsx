@@ -493,6 +493,9 @@ export function MealDetailScreen({
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={true}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        removeClippedSubviews={false}
       />
     </SafeAreaView>
   );
