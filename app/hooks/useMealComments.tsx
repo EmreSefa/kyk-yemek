@@ -7,7 +7,6 @@ export interface MealComment {
   meal_id: number;
   user_id: string;
   comment: string;
-  is_approved: boolean;
   created_at: string;
   profiles: {
     display_name: string | null;
@@ -72,30 +71,6 @@ export const useMealComments = (mealId: number) => {
     [mealId, user, fetchComments]
   );
 
-  // Update an existing comment
-  const updateComment = useCallback(
-    async (commentId: number, comment: string) => {
-      if (!user || !commentId || !comment.trim()) return false;
-
-      setIsSubmitting(true);
-      setError(null);
-
-      try {
-        await mealService.updateComment(commentId, user.id, comment.trim());
-        // Refresh comments to include the updated one
-        await fetchComments();
-        return true;
-      } catch (err) {
-        console.error("Error updating comment:", err);
-        setError("Yorum güncellenirken bir hata oluştu.");
-        return false;
-      } finally {
-        setIsSubmitting(false);
-      }
-    },
-    [user, fetchComments]
-  );
-
   // Delete a comment
   const deleteComment = useCallback(
     async (commentId: number) => {
@@ -126,7 +101,6 @@ export const useMealComments = (mealId: number) => {
     isSubmitting,
     error,
     addComment,
-    updateComment,
     deleteComment,
     fetchComments,
   };

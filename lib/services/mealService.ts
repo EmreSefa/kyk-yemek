@@ -416,7 +416,7 @@ export const mealService = {
   },
 
   /**
-   * Get all approved comments for a meal
+   * Get all comments for a meal
    */
   async getMealComments(mealId: number, userId?: string) {
     try {
@@ -429,80 +429,11 @@ export const mealService = {
           meal_id,
           user_id,
           comment,
-          is_approved,
           created_at
         `
         )
         .eq("meal_id", mealId)
         .order("created_at", { ascending: false });
-
-      // If no user ID is provided, only fetch approved comments
-      if (!userId) {
-        query = query.eq("is_approved", true);
-      } else {
-        // Use separate filter methods instead of .or()
-        const { data: approvedComments, error: approvedError } = await supabase
-          .from("meal_comments")
-          .select(
-            `
-            id,
-            meal_id,
-            user_id,
-            comment,
-            is_approved,
-            created_at
-          `
-          )
-          .eq("meal_id", mealId)
-          .eq("is_approved", true)
-          .order("created_at", { ascending: false });
-
-        const { data: userComments, error: userError } = await supabase
-          .from("meal_comments")
-          .select(
-            `
-            id,
-            meal_id,
-            user_id,
-            comment,
-            is_approved,
-            created_at
-          `
-          )
-          .eq("meal_id", mealId)
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false });
-
-        if (approvedError) throw approvedError;
-        if (userError) throw userError;
-
-        // Instead of trying to join with non-existent profiles table,
-        // just return the data with basic profile placeholders
-        const combinedData = [...(approvedComments || [])];
-
-        userComments?.forEach((comment) => {
-          if (!combinedData.some((c) => c.id === comment.id)) {
-            combinedData.push(comment);
-          }
-        });
-
-        // Sort by created_at in descending order
-        combinedData.sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-
-        // Transform the response to match the expected MealComment format
-        return combinedData.map((item: any) => ({
-          id: item.id,
-          meal_id: item.meal_id,
-          user_id: item.user_id,
-          comment: item.comment,
-          is_approved: item.is_approved,
-          created_at: item.created_at,
-          profiles: { display_name: null, avatar_url: null },
-        }));
-      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -513,7 +444,6 @@ export const mealService = {
         meal_id: item.meal_id,
         user_id: item.user_id,
         comment: item.comment,
-        is_approved: item.is_approved,
         created_at: item.created_at,
         profiles: { display_name: null, avatar_url: null },
       }));

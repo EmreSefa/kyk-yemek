@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS public.meal_comments (
     meal_id BIGINT NOT NULL,
     user_id UUID NOT NULL,
     comment TEXT NOT NULL,
-    is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+    is_approved BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -76,11 +76,11 @@ CREATE POLICY "Users can delete their own comments"
     FOR DELETE
     USING (auth.uid() = user_id);
 
--- Policy for reading approved comments (anyone can read)
-CREATE POLICY "Anyone can read approved comments"
+-- Policy for reading comments (anyone can read all comments)
+CREATE POLICY "Anyone can read all comments"
     ON public.meal_comments
     FOR SELECT
-    USING (is_approved = TRUE OR auth.uid() = user_id);
+    USING (true);
 
 -- Grant permissions to authenticated users
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.meal_comments TO authenticated;
