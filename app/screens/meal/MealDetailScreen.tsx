@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   SafeAreaView,
   Pressable,
   useColorScheme,
@@ -19,6 +19,37 @@ interface MealDetailScreenProps {
   mealType: string;
   onClose: () => void;
 }
+
+// Define types for our flattened data structure
+interface InfoData {
+  date: string;
+  calories: number;
+}
+
+interface RatingData {
+  likes: number;
+  dislikes: number;
+  userRating: "like" | "dislike" | null | undefined;
+}
+
+interface CommentData {
+  mealId: number;
+}
+
+type SectionHeaderItem = {
+  id: string;
+  type: "sectionHeader";
+  title: string;
+  sectionType: string;
+};
+
+type DataItem = {
+  id: string;
+  type: "info" | "menu" | "rating" | "comments";
+  data: InfoData | MealItem | RatingData | CommentData;
+};
+
+type FlattenedItem = SectionHeaderItem | DataItem;
 
 export function MealDetailScreen({
   mealId,
@@ -192,6 +223,242 @@ export function MealDetailScreen({
     );
   }
 
+  // Define sections for FlatList
+  const sections = [
+    {
+      type: "info",
+      data: [
+        {
+          date: new Date(meal.meal_date).toLocaleDateString("tr-TR", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          }),
+          calories: meal.totalCalories || 0,
+        },
+      ],
+    },
+    {
+      type: "menu",
+      title: "Menü",
+      data: mealItems,
+    },
+    {
+      type: "rating",
+      title: "Beğeni",
+      data: [
+        {
+          likes: meal.likes || 0,
+          dislikes: meal.dislikes || 0,
+          userRating: meal.userRating || null,
+        },
+      ],
+    },
+    {
+      type: "comments",
+      data: [{ mealId: meal.id }],
+    },
+  ];
+
+  // Flatten the sections for the FlatList
+  const flattenedData: FlattenedItem[] = sections.reduce(
+    (acc: FlattenedItem[], section) => {
+      // Add section header
+      if (section.title) {
+        acc.push({
+          id: `header-${section.type}`,
+          type: "sectionHeader",
+          title: section.title,
+          sectionType: section.type,
+        });
+      }
+
+      // Add section items with type
+      section.data.forEach((item, index) => {
+        acc.push({
+          id: `${section.type}-${index}`,
+          type: section.type as "info" | "menu" | "rating" | "comments",
+          data: item,
+        });
+      });
+
+      return acc;
+    },
+    []
+  );
+
+  const renderItem = ({ item }: { item: FlattenedItem }) => {
+    if (item.type === "sectionHeader") {
+      return (
+        <Text
+          style={[
+            styles.sectionTitle,
+            isDark ? styles.textDark : styles.textLight,
+          ]}
+        >
+          {item.title}
+        </Text>
+      );
+    }
+
+    switch (item.type) {
+      case "info": {
+        const infoData = item.data as InfoData;
+        return (
+          <View style={styles.infoContainer}>
+            <Text
+              style={[
+                styles.dateText,
+                isDark ? styles.textDark : styles.textLight,
+              ]}
+            >
+              {infoData.date}
+            </Text>
+            <View style={styles.calorieContainer}>
+              <Ionicons
+                name="flame"
+                size={16}
+                color={isDark ? "#FF9500" : "#FF3B30"}
+              />
+              <Text
+                style={[
+                  styles.calorieText,
+                  isDark ? styles.calorieDark : styles.calorieLight,
+                ]}
+              >
+                {infoData.calories} kcal
+              </Text>
+            </View>
+          </View>
+        );
+      }
+
+      case "menu": {
+        const menuItem = item.data as MealItem;
+        return (
+          <View style={styles.menuItem}>
+            <MenuItemIcon
+              itemName={menuItem.item_name}
+              mealType={meal.meal_type}
+              index={parseInt(item.id.split("-")[1])}
+              size={24}
+              isCaloriesRow={false}
+            />
+            <Text
+              style={[
+                styles.itemName,
+                isDark ? styles.textDark : styles.textLight,
+              ]}
+            >
+              {menuItem.item_name}
+            </Text>
+            {menuItem.calories && (
+              <Text
+                style={[
+                  styles.itemCalories,
+                  isDark ? styles.textDark : styles.textLight,
+                ]}
+              >
+                {menuItem.calories} kcal
+              </Text>
+            )}
+          </View>
+        );
+      }
+
+      case "rating": {
+        const ratingData = item.data as RatingData;
+        return (
+          <View style={styles.ratingButtons}>
+            <Pressable
+              style={[
+                styles.ratingButton,
+                ratingData.userRating === "like" && styles.ratingButtonActive,
+              ]}
+              onPress={() => handleRate("like")}
+            >
+              <Ionicons
+                name={
+                  ratingData.userRating === "like"
+                    ? "thumbs-up"
+                    : "thumbs-up-outline"
+                }
+                size={24}
+                color={
+                  ratingData.userRating === "like"
+                    ? isDark
+                      ? "#FFFFFF"
+                      : "#007AFF"
+                    : isDark
+                    ? "#BBBBBB"
+                    : "#666666"
+                }
+              />
+              <Text
+                style={[
+                  styles.ratingText,
+                  ratingData.userRating === "like" && styles.ratingTextActive,
+                  isDark && styles.ratingTextDark,
+                ]}
+              >
+                {ratingData.likes} Beğenme
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={[
+                styles.ratingButton,
+                ratingData.userRating === "dislike" &&
+                  styles.ratingButtonActive,
+              ]}
+              onPress={() => handleRate("dislike")}
+            >
+              <Ionicons
+                name={
+                  ratingData.userRating === "dislike"
+                    ? "thumbs-down"
+                    : "thumbs-down-outline"
+                }
+                size={24}
+                color={
+                  ratingData.userRating === "dislike"
+                    ? isDark
+                      ? "#FFFFFF"
+                      : "#007AFF"
+                    : isDark
+                    ? "#BBBBBB"
+                    : "#666666"
+                }
+              />
+              <Text
+                style={[
+                  styles.ratingText,
+                  ratingData.userRating === "dislike" &&
+                    styles.ratingTextActive,
+                  isDark && styles.ratingTextDark,
+                ]}
+              >
+                {ratingData.dislikes} Beğenmeme
+              </Text>
+            </Pressable>
+          </View>
+        );
+      }
+
+      case "comments": {
+        const commentData = item.data as CommentData;
+        return (
+          <View style={styles.commentsContainer}>
+            <CommentsSection mealId={commentData.mealId} />
+          </View>
+        );
+      }
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <SafeAreaView
       style={[
@@ -219,182 +486,14 @@ export function MealDetailScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <View style={styles.mainContainer}>
-        <ScrollView style={styles.scrollView}>
-          <View style={styles.content}>
-            {/* Meal date and calorie info */}
-            <View style={styles.infoContainer}>
-              <Text
-                style={[
-                  styles.dateText,
-                  isDark ? styles.textDark : styles.textLight,
-                ]}
-              >
-                {new Date(meal.meal_date).toLocaleDateString("tr-TR", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </Text>
-              <View style={styles.calorieContainer}>
-                <Ionicons
-                  name="flame"
-                  size={16}
-                  color={isDark ? "#FF9500" : "#FF3B30"}
-                />
-                <Text
-                  style={[
-                    styles.calorieText,
-                    isDark ? styles.calorieDark : styles.calorieLight,
-                  ]}
-                >
-                  {meal.totalCalories || 0} kcal
-                </Text>
-              </View>
-            </View>
-
-            {/* Meal items */}
-            <View style={styles.menuContainer}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  isDark ? styles.textDark : styles.textLight,
-                ]}
-              >
-                Menü
-              </Text>
-              {mealItems.length > 0 ? (
-                mealItems.map((item, index) => (
-                  <View key={item.id || index} style={styles.menuItem}>
-                    <MenuItemIcon
-                      itemName={item.item_name}
-                      mealType={meal.meal_type}
-                      index={index}
-                      size={24}
-                      isCaloriesRow={false}
-                    />
-                    <Text
-                      style={[
-                        styles.itemName,
-                        isDark ? styles.textDark : styles.textLight,
-                      ]}
-                    >
-                      {item.item_name}
-                    </Text>
-                    {item.calories && (
-                      <Text
-                        style={[
-                          styles.itemCalories,
-                          isDark ? styles.textDark : styles.textLight,
-                        ]}
-                      >
-                        {item.calories} kcal
-                      </Text>
-                    )}
-                  </View>
-                ))
-              ) : (
-                <Text
-                  style={[
-                    styles.noMenuText,
-                    isDark ? styles.textDark : styles.textLight,
-                  ]}
-                >
-                  Detaylı menü bilgisi bulunamadı.
-                </Text>
-              )}
-            </View>
-
-            {/* Ratings */}
-            <View style={styles.ratingsContainer}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  isDark ? styles.textDark : styles.textLight,
-                ]}
-              >
-                Beğeni
-              </Text>
-              <View style={styles.ratingButtons}>
-                <Pressable
-                  style={[
-                    styles.ratingButton,
-                    meal.userRating === "like" && styles.ratingButtonActive,
-                  ]}
-                  onPress={() => handleRate("like")}
-                >
-                  <Ionicons
-                    name={
-                      meal.userRating === "like"
-                        ? "thumbs-up"
-                        : "thumbs-up-outline"
-                    }
-                    size={24}
-                    color={
-                      meal.userRating === "like"
-                        ? isDark
-                          ? "#FFFFFF"
-                          : "#007AFF"
-                        : isDark
-                        ? "#BBBBBB"
-                        : "#666666"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.ratingText,
-                      meal.userRating === "like" && styles.ratingTextActive,
-                      isDark && styles.ratingTextDark,
-                    ]}
-                  >
-                    {meal.likes || 0} Beğenme
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  style={[
-                    styles.ratingButton,
-                    meal.userRating === "dislike" && styles.ratingButtonActive,
-                  ]}
-                  onPress={() => handleRate("dislike")}
-                >
-                  <Ionicons
-                    name={
-                      meal.userRating === "dislike"
-                        ? "thumbs-down"
-                        : "thumbs-down-outline"
-                    }
-                    size={24}
-                    color={
-                      meal.userRating === "dislike"
-                        ? isDark
-                          ? "#FFFFFF"
-                          : "#007AFF"
-                        : isDark
-                        ? "#BBBBBB"
-                        : "#666666"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.ratingText,
-                      meal.userRating === "dislike" && styles.ratingTextActive,
-                      isDark && styles.ratingTextDark,
-                    ]}
-                  >
-                    {meal.dislikes || 0} Beğenmeme
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* Comments section - outside of ScrollView to avoid nesting VirtualizedLists */}
-        <View style={styles.commentsContainer}>
-          <CommentsSection mealId={meal.id} />
-        </View>
-      </View>
+      <FlatList
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        data={flattenedData}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator={true}
+      />
     </SafeAreaView>
   );
 }
@@ -428,19 +527,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
   },
-  mainContainer: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-  },
-  scrollView: {
-    flex: 0.5,
-  },
-  commentsContainer: {
-    flex: 0.5,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0, 0, 0, 0.1)",
-  },
   content: {
     padding: 16,
   },
@@ -473,13 +559,11 @@ const styles = StyleSheet.create({
   calorieDark: {
     color: "#FF9500",
   },
-  menuContainer: {
-    marginBottom: 24,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     marginBottom: 12,
+    marginTop: 24,
   },
   menuItem: {
     flexDirection: "row",
@@ -504,12 +588,10 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginVertical: 24,
   },
-  ratingsContainer: {
-    marginBottom: 24,
-  },
   ratingButtons: {
     flexDirection: "row",
     justifyContent: "space-around",
+    marginBottom: 24,
   },
   ratingButton: {
     flexDirection: "row",
@@ -545,5 +627,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 40,
     fontSize: 16,
+  },
+  commentsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
   },
 });
