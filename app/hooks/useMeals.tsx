@@ -144,6 +144,7 @@ export const useMeals = () => {
         return updated;
       });
 
+      // Return success to trigger UI refresh
       return true;
     } catch (error) {
       console.error("Error rating meal:", error);

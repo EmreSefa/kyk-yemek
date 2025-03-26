@@ -429,7 +429,8 @@ export const mealService = {
           meal_id,
           user_id,
           comment,
-          created_at
+          created_at,
+          profiles:user_id(display_name, avatar_url)
         `
         )
         .eq("meal_id", mealId)
@@ -438,15 +439,8 @@ export const mealService = {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Transform the response to match the expected MealComment format
-      return data.map((item: any) => ({
-        id: item.id,
-        meal_id: item.meal_id,
-        user_id: item.user_id,
-        comment: item.comment,
-        created_at: item.created_at,
-        profiles: { display_name: null, avatar_url: null },
-      }));
+      // Return the data with profiles included from the join
+      return data;
     } catch (error) {
       console.error("Error in getMealComments:", error);
       throw error;
