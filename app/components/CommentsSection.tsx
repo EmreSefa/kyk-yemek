@@ -40,7 +40,11 @@ const CommentItem = ({
     locale: tr,
   });
 
-  const displayName = comment.profiles?.display_name || "Anonim Kullanıcı";
+  // Get display name with fallback to username or anonymous
+  const displayName =
+    comment.profiles?.display_name ||
+    comment.user_id.substring(0, 8) ||
+    "Anonim Kullanıcı";
 
   return (
     <View

@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMeals, MealItem, Meal } from "../hooks/useMeals";
 import { useColorScheme } from "react-native";
 import { MealDetailModal } from "./MealDetailModal";
+import { MenuItemIcon } from "./MenuItemIcon";
 
 // Helper function to get all meal items, checking all possible sources
 const getMealItems = (meal: Meal | null): MealItem[] => {
@@ -56,6 +57,75 @@ const getMealItems = (meal: Meal | null): MealItem[] => {
 // Helper function to calculate total calories
 const getTotalCalories = (items: MealItem[]): number => {
   return items.reduce((sum, item) => sum + (item.calories || 0), 0);
+};
+
+// Helper function to filter out "500 ml su", "çeyrek ekmek", calorie info rows, and the standalone calorie row
+const filterMenuItems = (items: MealItem[]): MealItem[] => {
+  if (!items || items.length === 0) return [];
+
+  // First, create a copy of the items array
+  let cleanedItems = [...items];
+
+  // Check if the last item is likely a calorie summary row (which can appear in various formats)
+  if (cleanedItems.length > 0) {
+    const lastItem = cleanedItems[cleanedItems.length - 1];
+    if (lastItem) {
+      const name = lastItem.item_name.toLowerCase().trim();
+
+      // Check for multiple patterns that indicate a calorie row
+      if (
+        /^\d+\s*kcal\s*$/i.test(name) || // "750 kcal"
+        /^\d+$/.test(name) || // Just a number
+        name.includes("kcal") || // Contains kcal anywhere
+        name.includes("kalori") || // Contains kalori
+        // Empty name item with calories (as seen in screenshot)
+        (name === "" && lastItem.calories && lastItem.calories > 0) ||
+        // Item that only has an icon with calories value (as in screenshot)
+        /^[\s\u200B]*$/.test(name) || // Only whitespace or zero-width spaces
+        // For the specific case in the screenshot
+        (cleanedItems.length > 1 && lastItem.calories === 750)
+      ) {
+        cleanedItems.pop(); // Remove the last item if it's a calorie row
+      }
+    }
+  }
+
+  // Then filter the remaining items
+  return cleanedItems.filter((item) => {
+    const name = item.item_name.toLowerCase().trim();
+
+    // Skip empty items or items that are just whitespace
+    if (!name || /^[\s\u200B]*$/.test(name)) {
+      return false;
+    }
+
+    // Filter out standard excluded items
+    if (
+      name.includes("500 ml su") ||
+      name.includes("çeyrek ekmek") ||
+      name.includes("kcal") ||
+      name.includes("kalori")
+    ) {
+      return false;
+    }
+
+    // Remove standalone calorie rows (typically just a number followed by "kcal")
+    if (/^\d+\s*kcal\s*$/i.test(name)) {
+      return false;
+    }
+
+    // Also filter out items that are just numbers or look like calorie values
+    if (/^\d+\s*$/.test(name)) {
+      return false;
+    }
+
+    // Special case: if the item has no name but has calories value
+    if (name === "" && item.calories && item.calories > 0) {
+      return false;
+    }
+
+    return true;
+  });
 };
 
 interface MealCardProps {
@@ -164,8 +234,9 @@ export function MealCard({
     );
   }
 
-  // Get meal items from any available source
-  const mealItems = getMealItems(meal);
+  // Get meal items from any available source and filter out unwanted items
+  const allMealItems = getMealItems(meal);
+  const mealItems = filterMenuItems(allMealItems);
 
   // Calculate total calories if not provided
   const totalCalories = meal.totalCalories || getTotalCalories(mealItems);
@@ -206,6 +277,13 @@ export function MealCard({
           {mealItems.length > 0 ? (
             mealItems.map((item, index) => (
               <View key={item.id || index} style={styles.menuItem}>
+                <MenuItemIcon
+                  itemName={item.item_name}
+                  mealType={meal.meal_type}
+                  index={index}
+                  size={32}
+                  isCaloriesRow={false}
+                />
                 <Text
                   style={[
                     styles.itemName,
@@ -239,78 +317,88 @@ export function MealCard({
         </View>
 
         <View style={styles.footer}>
-          <Pressable
-            style={[
-              styles.ratingButton,
-              meal?.userRating === "like" && styles.ratingButtonActive,
-            ]}
-            disabled={isRating}
-            onPress={() => handleRate("like")}
-          >
+          <Pressable style={styles.commentsButton} onPress={handleCardPress}>
             <Ionicons
-              name={
-                meal?.userRating === "like" ? "thumbs-up" : "thumbs-up-outline"
-              }
+              name="chatbubble-outline"
               size={16}
-              color={
-                meal?.userRating === "like"
-                  ? "#34C759"
-                  : isDark
-                  ? "#FFFFFF"
-                  : "#8E8E93"
-              }
+              color={isDark ? "#FFFFFF" : "#000000"}
             />
             <Text
               style={[
-                styles.ratingText,
-                isDark ? styles.ratingTextDark : styles.ratingTextLight,
-                meal?.userRating === "like" && styles.ratingTextActive,
+                styles.commentsButtonText,
+                isDark ? styles.buttonTextDark : styles.buttonTextLight,
               ]}
             >
-              {meal?.likes || 0}
+              Yorumlar
             </Text>
           </Pressable>
 
-          <Pressable
-            style={[
-              styles.ratingButton,
-              meal?.userRating === "dislike" && styles.ratingButtonActive,
-            ]}
-            disabled={isRating}
-            onPress={() => handleRate("dislike")}
-          >
-            <Ionicons
-              name={
-                meal?.userRating === "dislike"
-                  ? "thumbs-down"
-                  : "thumbs-down-outline"
-              }
-              size={16}
-              color={
-                meal?.userRating === "dislike"
-                  ? "#FF3B30"
-                  : isDark
-                  ? "#FFFFFF"
-                  : "#8E8E93"
-              }
-            />
+          <View style={styles.ratingContainer}>
+            <Pressable
+              style={[styles.ratingButton, styles.likeButton]}
+              onPress={() => handleRate("like")}
+              disabled={isRating}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
+              <Ionicons
+                name={
+                  meal.userRating === "like" ? "thumbs-up" : "thumbs-up-outline"
+                }
+                size={20}
+                color={
+                  meal.userRating === "like"
+                    ? "#4CD964"
+                    : isDark
+                    ? "#FFFFFF"
+                    : "#000000"
+                }
+              />
+            </Pressable>
             <Text
               style={[
-                styles.ratingText,
-                isDark ? styles.ratingTextDark : styles.ratingTextLight,
-                meal?.userRating === "dislike" && styles.ratingTextActive,
+                styles.ratingCount,
+                isDark ? styles.textDark : styles.textLight,
               ]}
             >
-              {meal?.dislikes || 0}
+              {meal.likes || 0}
             </Text>
-          </Pressable>
+            <Pressable
+              style={[styles.ratingButton, styles.dislikeButton]}
+              onPress={() => handleRate("dislike")}
+              disabled={isRating}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+            >
+              <Ionicons
+                name={
+                  meal.userRating === "dislike"
+                    ? "thumbs-down"
+                    : "thumbs-down-outline"
+                }
+                size={20}
+                color={
+                  meal.userRating === "dislike"
+                    ? "#FF3B30"
+                    : isDark
+                    ? "#FFFFFF"
+                    : "#000000"
+                }
+              />
+            </Pressable>
+            <Text
+              style={[
+                styles.ratingCount,
+                isDark ? styles.textDark : styles.textLight,
+              ]}
+            >
+              {meal.dislikes || 0}
+            </Text>
+          </View>
         </View>
       </Pressable>
 
-      {/* Meal Detail Modal */}
-      {meal && (
+      {showDetailModal && (
         <MealDetailModal
-          visible={showDetailModal}
+          visible={true}
           mealId={meal.id}
           mealType={meal.meal_type}
           onClose={handleCloseModal}
@@ -323,14 +411,13 @@ export function MealCard({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
-    padding: 16,
-    marginVertical: 8,
-    marginHorizontal: 0,
+    overflow: "hidden",
+    marginBottom: 16,
+    elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.22,
-    shadowRadius: 2.22,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
   },
   cardLight: {
     backgroundColor: "#FFFFFF",
@@ -342,11 +429,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
   },
   title: {
-    fontSize: 18,
-    fontWeight: "600",
+    fontSize: 19,
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   titleLight: {
     color: "#000000",
@@ -357,15 +447,15 @@ const styles = StyleSheet.create({
   calorieContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "rgba(255, 149, 0, 0.1)",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   calories: {
-    fontSize: 12,
-    fontWeight: "500",
-    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 2,
   },
   caloriesLight: {
     color: "#FF3B30",
@@ -374,20 +464,25 @@ const styles = StyleSheet.create({
     color: "#FF9500",
   },
   content: {
-    marginBottom: 12,
+    padding: 16,
   },
   menuItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
   },
   itemName: {
+    fontSize: 16,
     flex: 1,
-    fontSize: 14,
+    marginRight: 8,
+    fontWeight: "500",
   },
   itemCalories: {
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: 12,
+    fontWeight: "500",
   },
   noMenu: {
     fontSize: 14,
@@ -396,39 +491,52 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   textLight: {
-    color: "#000000",
+    color: "#333333",
   },
   textDark: {
-    color: "#FFFFFF",
+    color: "#EBEBF5",
   },
   footer: {
     flexDirection: "row",
-    justifyContent: "flex-start",
-    marginTop: 8,
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#EEEEEE",
   },
-  ratingButton: {
+  commentsButton: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 24,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
+    padding: 6,
   },
-  ratingButtonActive: {
-    backgroundColor: "rgba(0,0,0,0.05)",
-  },
-  ratingText: {
+  commentsButtonText: {
+    marginLeft: 6,
     fontSize: 14,
     fontWeight: "500",
-    marginLeft: 4,
   },
-  ratingTextLight: {
-    color: "#8E8E93",
+  buttonTextLight: {
+    color: "#000000",
   },
-  ratingTextDark: {
+  buttonTextDark: {
     color: "#FFFFFF",
   },
-  ratingTextActive: {
-    color: "#8E8E93",
+  ratingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  ratingButton: {
+    padding: 10,
+  },
+  likeButton: {
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  dislikeButton: {
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
+  },
+  ratingCount: {
+    marginHorizontal: 8,
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
