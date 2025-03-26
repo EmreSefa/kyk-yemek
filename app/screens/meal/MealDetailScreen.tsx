@@ -12,6 +12,7 @@ import {
 import { useMeals, Meal, MealItem } from "../../hooks/useMeals";
 import { Ionicons } from "@expo/vector-icons";
 import { CommentsSection } from "../../components/CommentsSection";
+import { MenuItemIcon } from "../../components/MenuItemIcon";
 
 interface MealDetailScreenProps {
   mealId: number;
@@ -72,7 +73,78 @@ export function MealDetailScreen({
     return [];
   };
 
-  const mealItems = getMealItems(meal);
+  // Helper function to filter out "500 ml su", "çeyrek ekmek", calorie info rows, and the standalone calorie row
+  const filterMenuItems = (items: MealItem[]): MealItem[] => {
+    if (!items || items.length === 0) return [];
+
+    // First, create a copy of the items array
+    let cleanedItems = [...items];
+
+    // Check if the last item is likely a calorie summary row (which can appear in various formats)
+    if (cleanedItems.length > 0) {
+      const lastItem = cleanedItems[cleanedItems.length - 1];
+      if (lastItem) {
+        const name = lastItem.item_name.toLowerCase().trim();
+
+        // Check for multiple patterns that indicate a calorie row
+        if (
+          /^\d+\s*kcal\s*$/i.test(name) || // "750 kcal"
+          /^\d+$/.test(name) || // Just a number
+          name.includes("kcal") || // Contains kcal anywhere
+          name.includes("kalori") || // Contains kalori
+          // Empty name item with calories (as seen in screenshot)
+          (name === "" && lastItem.calories && lastItem.calories > 0) ||
+          // Item that only has an icon with calories value (as in screenshot)
+          /^[\s\u200B]*$/.test(name) || // Only whitespace or zero-width spaces
+          // For the specific case in the screenshot
+          (cleanedItems.length > 1 && lastItem.calories === 750)
+        ) {
+          cleanedItems.pop(); // Remove the last item if it's a calorie row
+        }
+      }
+    }
+
+    // Then filter the remaining items
+    return cleanedItems.filter((item) => {
+      const name = item.item_name.toLowerCase().trim();
+
+      // Skip empty items or items that are just whitespace
+      if (!name || /^[\s\u200B]*$/.test(name)) {
+        return false;
+      }
+
+      // Filter out standard excluded items
+      if (
+        name.includes("500 ml su") ||
+        name.includes("çeyrek ekmek") ||
+        name.includes("kcal") ||
+        name.includes("kalori")
+      ) {
+        return false;
+      }
+
+      // Remove standalone calorie rows (typically just a number followed by "kcal")
+      if (/^\d+\s*kcal\s*$/i.test(name)) {
+        return false;
+      }
+
+      // Also filter out items that are just numbers or look like calorie values
+      if (/^\d+\s*$/.test(name)) {
+        return false;
+      }
+
+      // Special case: if the item has no name but has calories value
+      if (name === "" && item.calories && item.calories > 0) {
+        return false;
+      }
+
+      return true;
+    });
+  };
+
+  // Get all meal items and filter out unwanted items
+  const allMealItems = getMealItems(meal);
+  const mealItems = filterMenuItems(allMealItems);
 
   // Handle when user clicks like or dislike
   const handleRate = async (rating: "like" | "dislike") => {
@@ -147,169 +219,182 @@ export function MealDetailScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          {/* Meal date and calorie info */}
-          <View style={styles.infoContainer}>
-            <Text
-              style={[
-                styles.dateText,
-                isDark ? styles.textDark : styles.textLight,
-              ]}
-            >
-              {new Date(meal.meal_date).toLocaleDateString("tr-TR", {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </Text>
-            <View style={styles.calorieContainer}>
-              <Ionicons
-                name="flame"
-                size={16}
-                color={isDark ? "#FF9500" : "#FF3B30"}
-              />
+      <View style={styles.mainContainer}>
+        <ScrollView style={styles.scrollView}>
+          <View style={styles.content}>
+            {/* Meal date and calorie info */}
+            <View style={styles.infoContainer}>
               <Text
                 style={[
-                  styles.calorieText,
-                  isDark ? styles.calorieDark : styles.calorieLight,
-                ]}
-              >
-                {meal.totalCalories || 0} kcal
-              </Text>
-            </View>
-          </View>
-
-          {/* Meal items */}
-          <View style={styles.menuContainer}>
-            <Text
-              style={[
-                styles.sectionTitle,
-                isDark ? styles.textDark : styles.textLight,
-              ]}
-            >
-              Menü
-            </Text>
-            {mealItems.length > 0 ? (
-              mealItems.map((item, index) => (
-                <View key={item.id || index} style={styles.menuItem}>
-                  <Text
-                    style={[
-                      styles.itemName,
-                      isDark ? styles.textDark : styles.textLight,
-                    ]}
-                  >
-                    {item.item_name}
-                  </Text>
-                  {item.calories && (
-                    <Text
-                      style={[
-                        styles.itemCalories,
-                        isDark ? styles.textDark : styles.textLight,
-                      ]}
-                    >
-                      {item.calories} kcal
-                    </Text>
-                  )}
-                </View>
-              ))
-            ) : (
-              <Text
-                style={[
-                  styles.noMenuText,
+                  styles.dateText,
                   isDark ? styles.textDark : styles.textLight,
                 ]}
               >
-                Detaylı menü bilgisi bulunamadı.
+                {new Date(meal.meal_date).toLocaleDateString("tr-TR", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </Text>
-            )}
-          </View>
-
-          {/* Ratings */}
-          <View style={styles.ratingsContainer}>
-            <Text
-              style={[
-                styles.sectionTitle,
-                isDark ? styles.textDark : styles.textLight,
-              ]}
-            >
-              Değerlendirme
-            </Text>
-            <View style={styles.ratingButtons}>
-              <Pressable
-                style={[
-                  styles.ratingButton,
-                  meal.userRating === "like" && styles.ratingButtonActive,
-                ]}
-                onPress={() => handleRate("like")}
-              >
+              <View style={styles.calorieContainer}>
                 <Ionicons
-                  name={
-                    meal.userRating === "like"
-                      ? "thumbs-up"
-                      : "thumbs-up-outline"
-                  }
-                  size={20}
-                  color={
-                    meal.userRating === "like"
-                      ? "#34C759"
-                      : isDark
-                      ? "#FFFFFF"
-                      : "#8E8E93"
-                  }
+                  name="flame"
+                  size={16}
+                  color={isDark ? "#FF9500" : "#FF3B30"}
                 />
                 <Text
                   style={[
-                    styles.ratingText,
-                    isDark ? styles.ratingTextDark : styles.ratingTextLight,
-                    meal.userRating === "like" && styles.ratingTextActive,
+                    styles.calorieText,
+                    isDark ? styles.calorieDark : styles.calorieLight,
                   ]}
                 >
-                  {meal.likes || 0} Beğeni
+                  {meal.totalCalories || 0} kcal
                 </Text>
-              </Pressable>
+              </View>
+            </View>
 
-              <Pressable
+            {/* Meal items */}
+            <View style={styles.menuContainer}>
+              <Text
                 style={[
-                  styles.ratingButton,
-                  meal.userRating === "dislike" && styles.ratingButtonActive,
+                  styles.sectionTitle,
+                  isDark ? styles.textDark : styles.textLight,
                 ]}
-                onPress={() => handleRate("dislike")}
               >
-                <Ionicons
-                  name={
-                    meal.userRating === "dislike"
-                      ? "thumbs-down"
-                      : "thumbs-down-outline"
-                  }
-                  size={20}
-                  color={
-                    meal.userRating === "dislike"
-                      ? "#FF3B30"
-                      : isDark
-                      ? "#FFFFFF"
-                      : "#8E8E93"
-                  }
-                />
+                Menü
+              </Text>
+              {mealItems.length > 0 ? (
+                mealItems.map((item, index) => (
+                  <View key={item.id || index} style={styles.menuItem}>
+                    <MenuItemIcon
+                      itemName={item.item_name}
+                      mealType={meal.meal_type}
+                      index={index}
+                      size={24}
+                      isCaloriesRow={false}
+                    />
+                    <Text
+                      style={[
+                        styles.itemName,
+                        isDark ? styles.textDark : styles.textLight,
+                      ]}
+                    >
+                      {item.item_name}
+                    </Text>
+                    {item.calories && (
+                      <Text
+                        style={[
+                          styles.itemCalories,
+                          isDark ? styles.textDark : styles.textLight,
+                        ]}
+                      >
+                        {item.calories} kcal
+                      </Text>
+                    )}
+                  </View>
+                ))
+              ) : (
                 <Text
                   style={[
-                    styles.ratingText,
-                    isDark ? styles.ratingTextDark : styles.ratingTextLight,
-                    meal.userRating === "dislike" && styles.ratingTextActive,
+                    styles.noMenuText,
+                    isDark ? styles.textDark : styles.textLight,
                   ]}
                 >
-                  {meal.dislikes || 0} Beğenmeme
+                  Detaylı menü bilgisi bulunamadı.
                 </Text>
-              </Pressable>
+              )}
+            </View>
+
+            {/* Ratings */}
+            <View style={styles.ratingsContainer}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  isDark ? styles.textDark : styles.textLight,
+                ]}
+              >
+                Beğeni
+              </Text>
+              <View style={styles.ratingButtons}>
+                <Pressable
+                  style={[
+                    styles.ratingButton,
+                    meal.userRating === "like" && styles.ratingButtonActive,
+                  ]}
+                  onPress={() => handleRate("like")}
+                >
+                  <Ionicons
+                    name={
+                      meal.userRating === "like"
+                        ? "thumbs-up"
+                        : "thumbs-up-outline"
+                    }
+                    size={24}
+                    color={
+                      meal.userRating === "like"
+                        ? isDark
+                          ? "#FFFFFF"
+                          : "#007AFF"
+                        : isDark
+                        ? "#BBBBBB"
+                        : "#666666"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.ratingText,
+                      meal.userRating === "like" && styles.ratingTextActive,
+                      isDark && styles.ratingTextDark,
+                    ]}
+                  >
+                    {meal.likes || 0} Beğenme
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.ratingButton,
+                    meal.userRating === "dislike" && styles.ratingButtonActive,
+                  ]}
+                  onPress={() => handleRate("dislike")}
+                >
+                  <Ionicons
+                    name={
+                      meal.userRating === "dislike"
+                        ? "thumbs-down"
+                        : "thumbs-down-outline"
+                    }
+                    size={24}
+                    color={
+                      meal.userRating === "dislike"
+                        ? isDark
+                          ? "#FFFFFF"
+                          : "#007AFF"
+                        : isDark
+                        ? "#BBBBBB"
+                        : "#666666"
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.ratingText,
+                      meal.userRating === "dislike" && styles.ratingTextActive,
+                      isDark && styles.ratingTextDark,
+                    ]}
+                  >
+                    {meal.dislikes || 0} Beğenmeme
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           </View>
+        </ScrollView>
 
-          {/* Comments Section */}
-          <View style={styles.commentsContainer}>
-            <CommentsSection mealId={meal.id} />
-          </View>
+        {/* Comments section - outside of ScrollView to avoid nesting VirtualizedLists */}
+        <View style={styles.commentsContainer}>
+          <CommentsSection mealId={meal.id} />
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -326,25 +411,35 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
-    height: 56,
-    marginBottom: 8,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
   },
   backButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
-    alignItems: "center",
-    borderRadius: 20,
+    alignItems: "flex-start",
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "600",
+    fontWeight: "bold",
+  },
+  mainContainer: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
   },
   scrollView: {
-    flex: 1,
+    flex: 0.5,
+  },
+  commentsContainer: {
+    flex: 0.5,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
   },
   content: {
     padding: 16,
@@ -353,10 +448,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.1)",
+    marginBottom: 24,
   },
   dateText: {
     fontSize: 16,
@@ -365,13 +457,13 @@ const styles = StyleSheet.create({
   calorieContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "rgba(255, 149, 0, 0.1)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
   },
   calorieText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "600",
     marginLeft: 4,
   },
@@ -386,31 +478,31 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "bold",
     marginBottom: 12,
   },
   menuItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    marginBottom: 14,
+    paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(0,0,0,0.05)",
+    borderBottomColor: "rgba(0, 0, 0, 0.1)",
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 17,
     flex: 1,
+    marginRight: 8,
+    fontWeight: "500",
   },
   itemCalories: {
     fontSize: 14,
     fontWeight: "500",
-    marginLeft: 8,
   },
   noMenuText: {
-    fontSize: 16,
-    fontStyle: "italic",
     textAlign: "center",
-    paddingVertical: 16,
+    fontStyle: "italic",
+    marginVertical: 24,
   },
   ratingsContainer: {
     marginBottom: 24,
@@ -418,44 +510,40 @@ const styles = StyleSheet.create({
   ratingButtons: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginTop: 8,
   },
   ratingButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    margin: 4,
   },
   ratingButtonActive: {
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
   },
   ratingText: {
     marginLeft: 8,
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  ratingTextLight: {
-    color: "#8E8E93",
-  },
-  ratingTextDark: {
-    color: "#FFFFFF",
+    fontSize: 14,
+    color: "#666666",
   },
   ratingTextActive: {
-    color: "#8E8E93",
+    color: "#007AFF",
+    fontWeight: "500",
   },
-  commentsContainer: {
-    marginTop: 8,
-  },
-  noMealText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 40,
+  ratingTextDark: {
+    color: "#BBBBBB",
   },
   textLight: {
     color: "#000000",
   },
   textDark: {
     color: "#FFFFFF",
+  },
+  noMealText: {
+    textAlign: "center",
+    marginTop: 40,
+    fontSize: 16,
   },
 });

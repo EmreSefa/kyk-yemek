@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   useColorScheme,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../hooks/useAuth";
@@ -251,19 +252,17 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
           Henüz yorum yapılmamış. İlk yorumu siz yapın!
         </Text>
       ) : (
-        <FlatList
-          data={comments}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
+        <ScrollView contentContainerStyle={styles.commentsList}>
+          {comments.map((item) => (
             <CommentItem
+              key={item.id.toString()}
               comment={item}
               onEdit={startEditingComment}
               onDelete={confirmDeleteComment}
               isCurrentUser={user?.id === item.user_id}
             />
-          )}
-          contentContainerStyle={styles.commentsList}
-        />
+          ))}
+        </ScrollView>
       )}
 
       {/* Comment input area */}
