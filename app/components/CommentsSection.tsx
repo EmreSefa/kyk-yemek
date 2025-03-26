@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -134,6 +134,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   } = useMealComments(mealId);
 
   const [newComment, setNewComment] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
 
   const handleAddComment = async () => {
     if (!user) {
@@ -215,6 +216,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
         <ScrollView
           contentContainerStyle={styles.commentsList}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={true}
         >
           {comments.map((item) => (
             <CommentItem
@@ -229,13 +231,15 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
 
       {/* Comment input area */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
+        style={{ width: "100%" }}
       >
         <View
           style={[
             styles.inputContainer,
             isDark ? styles.inputContainerDark : styles.inputContainerLight,
+            isFocused && styles.inputContainerFocused,
           ]}
         >
           <TextInput
@@ -251,6 +255,8 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
             multiline
             returnKeyType="default"
             blurOnSubmit={false}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
           />
           <Pressable
             style={[
@@ -449,5 +455,9 @@ const styles = StyleSheet.create({
   },
   noCommentsTextDark: {
     color: "#AAAAAA",
+  },
+  inputContainerFocused: {
+    borderWidth: 1,
+    borderColor: "#4A6572",
   },
 });

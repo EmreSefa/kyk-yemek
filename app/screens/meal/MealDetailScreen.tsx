@@ -8,6 +8,8 @@ import {
   Pressable,
   useColorScheme,
   StatusBar,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { useMeals, Meal, MealItem } from "../../hooks/useMeals";
 import { Ionicons } from "@expo/vector-icons";
@@ -486,17 +488,19 @@ export function MealDetailScreen({
         <View style={{ width: 40 }} />
       </View>
 
-      <FlatList
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        data={flattenedData}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={true}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        removeClippedSubviews={false}
-      />
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <FlatList
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          data={flattenedData}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={true}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          removeClippedSubviews={false}
+        />
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }
