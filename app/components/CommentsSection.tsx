@@ -136,6 +136,13 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   const [newComment, setNewComment] = useState("");
   const [isFocused, setIsFocused] = useState(false);
 
+  // Handle focusing the input
+  const focusInput = () => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  };
+
   const handleAddComment = async () => {
     if (!user) {
       Alert.alert(
@@ -150,7 +157,6 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
     const success = await addComment(newComment);
     if (success) {
       setNewComment("");
-      Keyboard.dismiss();
     }
   };
 
@@ -215,7 +221,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
       ) : (
         <ScrollView
           contentContainerStyle={styles.commentsList}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={true}
         >
           {comments.map((item) => (
@@ -230,11 +236,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
       )}
 
       {/* Comment input area */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
-        style={{ width: "100%" }}
-      >
+      <View style={styles.inputWrapper}>
         <View
           style={[
             styles.inputContainer,
@@ -252,11 +254,12 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
             onChangeText={setNewComment}
             placeholder="Bir yorum yazın..."
             placeholderTextColor={isDark ? "#AAAAAA" : "#999999"}
-            multiline
-            returnKeyType="default"
-            blurOnSubmit={false}
+            multiline={true}
+            numberOfLines={1}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
+            blurOnSubmit={false}
+            scrollEnabled={false}
           />
           <Pressable
             style={[
@@ -274,7 +277,7 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
             )}
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </View>
   );
 }
@@ -390,6 +393,10 @@ const styles = StyleSheet.create({
   },
   commentTextDark: {
     color: "#EEEEEE",
+  },
+  inputWrapper: {
+    marginTop: 8,
+    width: "100%",
   },
   inputContainer: {
     flexDirection: "row",

@@ -10,6 +10,8 @@ import {
   StatusBar,
   TouchableWithoutFeedback,
   Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useMeals, Meal, MealItem } from "../../hooks/useMeals";
 import { Ionicons } from "@expo/vector-icons";
@@ -462,46 +464,49 @@ export function MealDetailScreen({
   };
 
   return (
-    <SafeAreaView
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={[
         styles.container,
         isDark ? styles.containerDark : styles.containerLight,
       ]}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
     >
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={onClose}>
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={isDark ? "#FFFFFF" : "#000000"}
-          />
-        </Pressable>
-        <Text
-          style={[
-            styles.headerTitle,
-            isDark ? styles.textDark : styles.textLight,
-          ]}
-        >
-          {mealType === "BREAKFAST" ? "Kahvaltı" : "Akşam Yemeği"}
-        </Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <SafeAreaView style={{ flex: 1 }}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={onClose}>
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={isDark ? "#FFFFFF" : "#000000"}
+            />
+          </Pressable>
+          <Text
+            style={[
+              styles.headerTitle,
+              isDark ? styles.textDark : styles.textLight,
+            ]}
+          >
+            {mealType === "BREAKFAST" ? "Kahvaltı" : "Akşam Yemeği"}
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <FlatList
           style={styles.container}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: 120 }, // Extra padding at the bottom
+          ]}
           data={flattenedData}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           showsVerticalScrollIndicator={true}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          removeClippedSubviews={false}
         />
-      </TouchableWithoutFeedback>
-    </SafeAreaView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

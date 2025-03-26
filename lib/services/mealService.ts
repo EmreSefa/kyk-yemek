@@ -420,27 +420,28 @@ export const mealService = {
    */
   async getMealComments(mealId: number, userId?: string) {
     try {
-      // Build the query
-      let query = supabase
+      // Simply get the comments without trying to join
+      const { data, error } = await supabase
         .from("meal_comments")
-        .select(
-          `
-          id,
-          meal_id,
-          user_id,
-          comment,
-          created_at,
-          profiles:user_id(display_name, avatar_url)
-        `
-        )
+        .select("id, meal_id, user_id, comment, created_at")
         .eq("meal_id", mealId)
         .order("created_at", { ascending: false });
 
-      const { data, error } = await query;
       if (error) throw error;
 
-      // Return the data with profiles included from the join
-      return data;
+      // Transform the data to match the expected MealComment format
+      return data.map((item: any) => ({
+        id: item.id,
+        meal_id: item.meal_id,
+        user_id: item.user_id,
+        comment: item.comment,
+        created_at: item.created_at,
+        profiles: {
+          // Just use the first part of the user_id as display name
+          display_name: item.user_id.substring(0, 8) || "Kullanıcı",
+          avatar_url: null,
+        },
+      }));
     } catch (error) {
       console.error("Error in getMealComments:", error);
       throw error;
@@ -475,20 +476,5 @@ export const mealService = {
 
     if (error) throw error;
     return true;
-  },
-
-  /**
-   * Admin only: Approve a comment
-   */
-  async approveComment(commentId: number, approved: boolean) {
-    const { data, error } = await supabase
-      .from("meal_comments")
-      .update({ is_approved: approved, updated_at: new Date().toISOString() })
-      .eq("id", commentId)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data;
   },
 };
