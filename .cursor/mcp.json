@@ -7,7 +7,7 @@
         "npx",
         "-y",
         "@modelcontextprotocol/server-postgres",
-        "postgresql://postgres.bbqnwvbrbeilyaljiakm:fzUXuSGbmobDAnh9@aws-0-eu-central-2.pooler.supabase.com:5432/postgres"
+        "postgresql://postgres.nofdssioamusfrlkavjst:SCorpion89-Emre@aws-0-eu-central-1.pooler.supabase.com:5432/postgres"
       ]
     }
   }

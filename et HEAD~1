@@ -1,0 +1,10 @@
+[33mcommit a00936757f40a7577d6144f0864e4db10fc07510[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: EmreSefa <emreskadirhan@gmail.com>
+Date:   Wed Mar 26 04:17:06 2025 +0300
+
+    Add comments button to meal cards and fix comment section issues
+
+ app/components/CommentsSection.tsx |   6 [32m+[m[31m-[m
+ app/components/MealCard.tsx        | 296 [32m+++++++++++++++++++++++++[m[31m------------[m
+ lib/services/mealService.ts        | 142 [32m+++++++++++++[m[31m-----[m
+ 3 files changed, 311 insertions(+), 133 deletions(-)

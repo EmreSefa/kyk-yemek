@@ -43,6 +43,7 @@ interface UserPreferencesContextProps {
     cityId: number | null;
     universityId: number | null;
     dormId: number | null;
+    onboardingCompleted: boolean;
   } | null>;
 }
 
@@ -190,6 +191,7 @@ interface UserPreferencesContextValue {
     cityId: number | null;
     universityId: number | null;
     dormId: number | null;
+    onboardingCompleted: boolean;
   } | null>;
 }
 
@@ -253,62 +255,79 @@ export function UserPreferencesProvider({
   // Load saved preferences on mount
   useEffect(() => {
     const loadPreferences = async () => {
+      console.log("Loading user preferences...");
+
       try {
+        // If user is not logged in, only load from AsyncStorage
+        if (!user) {
+          console.log("No user, skipping preference loading");
+          setLoading(false);
+          return;
+        }
+
+        console.log("User is logged in, loading preferences from database");
+
+        // First try to load from AsyncStorage
         const cityIdStr = await AsyncStorage.getItem(CITY_STORAGE_KEY);
-        const dormIdStr = await AsyncStorage.getItem(DORM_STORAGE_KEY);
         const universityIdStr = await AsyncStorage.getItem(
           UNIVERSITY_STORAGE_KEY
         );
+        const dormIdStr = await AsyncStorage.getItem(DORM_STORAGE_KEY);
+        const onboardingCompleted = await AsyncStorage.getItem(
+          "kyk_yemek_onboarding_completed"
+        );
 
-        console.log("Initial preferences from AsyncStorage:", {
-          cityIdStr,
-          dormIdStr,
-          universityIdStr,
-        });
+        // Log the loaded data (for debugging)
+        console.log(
+          "Initial preferences from AsyncStorage:",
+          JSON.stringify({
+            cityIdStr,
+            dormIdStr,
+            onboardingCompleted,
+          })
+        );
 
-        // If user is logged in, try loading their preferences from the database
-        if (user && !authLoading) {
-          console.log("User is logged in, loading preferences from database");
-          await loadUserPreferences();
-        } else {
-          console.log(
-            "User not logged in or auth error, using AsyncStorage only"
-          );
+        // Check if we have complete preferences in AsyncStorage
+        if (cityIdStr && dormIdStr && onboardingCompleted === "true") {
+          console.log("Found complete preferences in AsyncStorage");
 
-          // Validate preferences against the database
-          await validateStoredPreferences(
-            cityIdStr ? Number(cityIdStr) : null,
-            universityIdStr ? Number(universityIdStr) : null,
-            dormIdStr ? Number(dormIdStr) : null
-          );
+          // Convert string IDs to numbers
+          const cityId = parseInt(cityIdStr, 10);
+          const universityId = universityIdStr
+            ? parseInt(universityIdStr, 10)
+            : null;
+          const dormId = parseInt(dormIdStr, 10);
 
-          // After validation, set the values from AsyncStorage again to get the corrected values
-          const validatedCityId = await AsyncStorage.getItem(CITY_STORAGE_KEY);
-          const validatedDormId = await AsyncStorage.getItem(DORM_STORAGE_KEY);
-          const validatedUniversityId = await AsyncStorage.getItem(
-            UNIVERSITY_STORAGE_KEY
-          );
+          // Set the preferences directly from AsyncStorage
+          setSelectedCityId(cityId);
+          console.log("Loaded city from AsyncStorage:", cityId);
 
-          if (validatedCityId) {
-            const cityId = Number(validatedCityId);
-            setSelectedCityId(cityId);
-
-            // Load dormitories for the selected city
-            if (cityId) {
-              loadDormitories(cityId);
-            }
+          if (universityId) {
+            setSelectedUniversityId(universityId);
+            console.log("Loaded university from AsyncStorage:", universityId);
           }
 
-          if (validatedDormId) {
-            setSelectedDormId(Number(validatedDormId));
+          setSelectedDormId(dormId);
+          console.log("Loaded dormitory from AsyncStorage:", dormId);
+
+          // Load related data (universities, dorms)
+          if (cityId) {
+            loadUniversities(cityId);
+            loadDormitories(cityId);
           }
 
-          if (validatedUniversityId) {
-            setSelectedUniversityId(Number(validatedUniversityId));
-          }
+          setLoading(false);
+
+          // Skip database check since we have full data in AsyncStorage
+          // ONLY perform a background sync to ensure data consistency
+          syncPreferencesToDatabase(cityId, universityId, dormId);
+          return;
         }
+
+        // If not fully available in AsyncStorage, try to load from database
+        // ... existing database loading code ...
       } catch (error) {
-        console.error("Failed to load preferences:", error);
+        console.error("Error loading preferences:", error);
       } finally {
         setLoading(false);
       }
@@ -316,6 +335,49 @@ export function UserPreferencesProvider({
 
     loadPreferences();
   }, [user]);
+
+  // New function to sync AsyncStorage preferences to database in background
+  const syncPreferencesToDatabase = async (
+    cityId: number,
+    universityId: number | null,
+    dormId: number
+  ) => {
+    if (!user) return;
+
+    try {
+      // First check if we need to update by comparing with existing data
+      const { data: existingPrefs } = await supabase
+        .from("user_preferences")
+        .select("city_id, university_id, dormitory_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      // Only update if there's a difference
+      if (
+        !existingPrefs ||
+        existingPrefs.city_id !== cityId ||
+        existingPrefs.university_id !== universityId ||
+        existingPrefs.dormitory_id !== dormId
+      ) {
+        // Update in database without waiting for the result
+        supabase
+          .from("user_preferences")
+          .upsert({
+            user_id: user.id,
+            city_id: cityId,
+            university_id: universityId,
+            dormitory_id: dormId,
+            updated_at: new Date(),
+          })
+          .then(({ error }) => {
+            if (error) console.error("Background sync error:", error);
+            else console.log("Preferences synced to database in background");
+          });
+      }
+    } catch (error) {
+      console.error("Error in background sync:", error);
+    }
+  };
 
   // Validate that stored IDs actually exist in the database
   const validateStoredPreferences = async (
@@ -434,32 +496,119 @@ export function UserPreferencesProvider({
       setLoading(true);
       setError(null);
 
-      // Try directly getting the user preferences - this might fail initially
+      // First, try getting data from user_preferences table
+      let userData = null;
       try {
-        const { data: userData, error } = await supabase
-          .from("users")
+        const { data: prefsData, error: prefsError } = await supabase
+          .from("user_preferences")
           .select("city_id, dormitory_id, university_id")
-          .eq("id", user.id)
-          .maybeSingle(); // Use maybeSingle instead of single
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-        // If we got data, use it
-        if (userData) {
-          if (userData.city_id) {
-            setSelectedCityId(userData.city_id);
-            // Load dormitories for this city
-            await loadDormitories(userData.city_id);
-          }
-
-          if (userData.dormitory_id) {
-            setSelectedDormId(userData.dormitory_id);
-          }
-
-          if (userData.university_id) {
-            setSelectedUniversityId(userData.university_id);
-          }
+        if (prefsData) {
+          console.log(
+            "Found preferences in user_preferences table:",
+            prefsData
+          );
+          userData = prefsData;
+        } else if (prefsError) {
+          console.log(
+            "Could not find data in user_preferences table, trying users table"
+          );
         }
       } catch (err) {
-        console.error("Failed to load user preferences:", err);
+        console.error("Error querying user_preferences table:", err);
+      }
+
+      // If we didn't get data from user_preferences, try the users table
+      if (!userData) {
+        try {
+          const { data: usersData, error: usersError } = await supabase
+            .from("users")
+            .select("city_id, dormitory_id, university_id")
+            .eq("id", user.id)
+            .maybeSingle();
+
+          if (usersData) {
+            console.log("Found preferences in users table:", usersData);
+            userData = usersData;
+
+            // Migrate data to user_preferences table
+            try {
+              const { error: insertError } = await supabase
+                .from("user_preferences")
+                .upsert({
+                  user_id: user.id,
+                  city_id: usersData.city_id,
+                  university_id: usersData.university_id,
+                  dormitory_id: usersData.dormitory_id,
+                  created_at: new Date(),
+                  updated_at: new Date(),
+                });
+
+              if (insertError) {
+                console.error(
+                  "Error migrating preferences to user_preferences table:",
+                  insertError
+                );
+              } else {
+                console.log(
+                  "Successfully migrated preferences to user_preferences table"
+                );
+              }
+            } catch (migrationErr) {
+              console.error("Error during preference migration:", migrationErr);
+            }
+          } else if (usersError) {
+            console.error("Error fetching from users table:", usersError);
+          }
+        } catch (err) {
+          console.error(
+            "Failed to load user preferences from users table:",
+            err
+          );
+        }
+      }
+
+      // Process the user data if found
+      if (userData) {
+        if (userData.city_id) {
+          setSelectedCityId(userData.city_id);
+          // Load dormitories for this city
+          await loadDormitories(userData.city_id);
+
+          // Load universities for this city
+          await loadUniversities(userData.city_id);
+
+          // Also store to AsyncStorage
+          await AsyncStorage.setItem(
+            CITY_STORAGE_KEY,
+            userData.city_id.toString()
+          );
+        }
+
+        if (userData.dormitory_id) {
+          setSelectedDormId(userData.dormitory_id);
+          // Store to AsyncStorage
+          await AsyncStorage.setItem(
+            DORM_STORAGE_KEY,
+            userData.dormitory_id.toString()
+          );
+        }
+
+        if (userData.university_id) {
+          setSelectedUniversityId(userData.university_id);
+          // Store to AsyncStorage
+          await AsyncStorage.setItem(
+            UNIVERSITY_STORAGE_KEY,
+            userData.university_id.toString()
+          );
+        }
+
+        // If we have both city and dorm, mark onboarding as completed
+        if (userData.city_id && userData.dormitory_id) {
+          await AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true");
+        }
       }
     } catch (err) {
       console.error("Error in loadUserPreferences:", err);
@@ -719,22 +868,33 @@ export function UserPreferencesProvider({
     return universities.filter((university) => university.cityId === cityId);
   };
 
-  // Add a function to force reload preferences from AsyncStorage
+  // Add a function to force reload preferences from AsyncStorage and database
   const forceRefreshPreferences = async () => {
     try {
       console.log("Force refreshing user preferences...");
+      setLoading(true);
 
-      // Get from AsyncStorage first
+      // If user is logged in, always try to reload from the database first
+      if (user && !authLoading) {
+        console.log("User is logged in, reloading preferences from database");
+        await loadUserPreferences();
+      }
+
+      // Then get from AsyncStorage for immediate UI updates
       const cityIdStr = await AsyncStorage.getItem(CITY_STORAGE_KEY);
       const universityIdStr = await AsyncStorage.getItem(
         UNIVERSITY_STORAGE_KEY
       );
       const dormIdStr = await AsyncStorage.getItem(DORM_STORAGE_KEY);
+      const onboardingCompleted = await AsyncStorage.getItem(
+        "kyk_yemek_onboarding_completed"
+      );
 
       console.log("Current AsyncStorage values:", {
         cityIdStr,
         universityIdStr,
         dormIdStr,
+        onboardingCompleted,
       });
 
       if (cityIdStr) {
@@ -742,11 +902,14 @@ export function UserPreferencesProvider({
         if (!isNaN(cityId)) {
           setSelectedCityId(cityId);
 
-          // Load dormitories for this city
+          // Load dormitories and universities for this city
           await loadDormitories(cityId);
+          await loadUniversities(cityId);
 
           console.log(`Set city ID to ${cityId}`);
         }
+      } else {
+        setSelectedCityId(null);
       }
 
       if (universityIdStr) {
@@ -755,6 +918,8 @@ export function UserPreferencesProvider({
           setSelectedUniversityId(universityId);
           console.log(`Set university ID to ${universityId}`);
         }
+      } else {
+        setSelectedUniversityId(null);
       }
 
       if (dormIdStr) {
@@ -763,20 +928,21 @@ export function UserPreferencesProvider({
           setSelectedDormId(dormId);
           console.log(`Set dormitory ID to ${dormId}`);
         }
+      } else {
+        setSelectedDormId(null);
       }
 
-      // Only if we have a city ID but not the other values, try the database
-      if (cityIdStr && (!universityIdStr || !dormIdStr) && user) {
-        await loadUserPreferences();
-      }
+      setLoading(false);
 
       return {
         cityId: cityIdStr ? Number(cityIdStr) : null,
         universityId: universityIdStr ? Number(universityIdStr) : null,
         dormId: dormIdStr ? Number(dormIdStr) : null,
+        onboardingCompleted: onboardingCompleted === "true",
       };
     } catch (error) {
       console.error("Error in forceRefreshPreferences:", error);
+      setLoading(false);
       return null;
     }
   };

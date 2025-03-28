@@ -27,16 +27,6 @@
           "color": "#4A6572",
           "sounds": ["./assets/notification-sound.wav"]
         }
-      ],
-      [
-        "expo-widgets",
-        {
-          "ios": {
-            "infoPlist": {
-              "NSSupportsLiveActivities": "true"
-            }
-          }
-        }
       ]
     ],
     "ios": {
@@ -47,7 +37,8 @@
             "CFBundleURLSchemes": ["kyk-yemek"]
           }
         ],
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification"],
+        "NSSupportsLiveActivities": "true"
       }
     },
     "android": {

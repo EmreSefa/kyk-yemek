@@ -124,16 +124,30 @@ export default function DormitorySelectionScreen() {
       setSavingPreferences(true);
 
       // Store the user preferences in Supabase
-      const { error } = await supabase
-        .from("users")
-        .update({
+      const { error: upsertError } = await supabase
+        .from("user_preferences")
+        .upsert({
+          user_id: user.id,
           city_id: cityId,
           university_id: universityId,
           dormitory_id: selectedDormitory,
-        })
-        .eq("id", user.id);
+        });
 
-      if (error) throw error;
+      if (upsertError) {
+        console.error("Error upserting to user_preferences:", upsertError);
+
+        // Fallback to updating users table if user_preferences fails
+        const { error } = await supabase
+          .from("users")
+          .update({
+            city_id: cityId,
+            university_id: universityId,
+            dormitory_id: selectedDormitory,
+          })
+          .eq("id", user.id);
+
+        if (error) throw error;
+      }
 
       // Also store the preferences to AsyncStorage for quick access
       const CITY_STORAGE_KEY = "kyk_yemek_selected_city";
@@ -144,25 +158,21 @@ export default function DormitorySelectionScreen() {
         AsyncStorage.setItem(CITY_STORAGE_KEY, cityId.toString()),
         AsyncStorage.setItem(UNIVERSITY_STORAGE_KEY, universityId.toString()),
         AsyncStorage.setItem(DORM_STORAGE_KEY, selectedDormitory.toString()),
+        // Mark onboarding as completed in AsyncStorage
+        AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true"),
       ]);
-
-      // Mark onboarding as completed in AsyncStorage
-      await AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true");
 
       console.log(
         "Preferences saved successfully and onboarding marked as completed"
       );
 
-      // Instead of trying to navigate directly, show success alert and let App.tsx handle the navigation
-      Alert.alert("Başarılı", "Tercihleriniz kaydedildi.", [
-        {
-          text: "Tamam",
-          onPress: () => {
-            // Let the RootNavigator handle the navigation based on AsyncStorage values
-            // This is safer than trying to navigate directly
-          },
-        },
-      ]);
+      // Use CommonActions to reset navigation and go to Main screen directly
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        })
+      );
     } catch (error: any) {
       console.error("Error saving user preferences:", error.message);
       Alert.alert(

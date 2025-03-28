@@ -144,3 +144,13 @@ The app uses Supabase with the following structure:
 - Feature engagement percentages
 - User satisfaction ratings
 - App store ratings and reviews
+
+Notifications System
+Meal reminders
+Custom notification preferences
+Notification management screen
+
+## Extra features
+
+- Down To Launch type of one click (Problem is: )
+- We can do an estimated distribution for the each menu item after we got the menu in to the database

@@ -96,6 +96,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const normalizedEmail = email.trim().toLowerCase();
 
       console.log("Attempting to sign in with:", normalizedEmail);
+
+      // Check if we have valid Supabase configuration
+      if (!supabase || !supabase.auth) {
+        console.error("Supabase client not properly initialized");
+        return {
+          success: false,
+          message:
+            "Authentication service unavailable. Please try again later.",
+        };
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizedEmail,
         password,
@@ -103,6 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign in error details:", error.message, error.status);
+
+        // Log more detailed information for debugging
+        if (error.message.includes("Invalid")) {
+          console.log("Authentication failed: Invalid credentials");
+        } else if (error.status === 0 || error.message.includes("network")) {
+          console.log("Network issue detected");
+        } else {
+          console.log("Other authentication error:", error);
+        }
+
         return { success: false, message: error.message };
       }
 
@@ -129,24 +150,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      // First, clear local states to speed up UI response
+      setState({
+        session: null,
+        user: null,
+        isLoading: false,
+      });
+
       // Clear any stored preferences from AsyncStorage
-      const CITY_STORAGE_KEY = "kyk_yemek_selected_city";
-      const UNIVERSITY_STORAGE_KEY = "kyk_yemek_selected_university";
-      const DORM_STORAGE_KEY = "kyk_yemek_selected_dorm";
+      const STORAGE_KEYS = [
+        "kyk_yemek_selected_city",
+        "kyk_yemek_selected_university",
+        "kyk_yemek_selected_dorm",
+        // Don't clear onboarding status to avoid forcing users to go through onboarding again
+        // "kyk_yemek_onboarding_completed",
+      ];
 
       // Remove all stored preferences
-      await Promise.all([
-        AsyncStorage.removeItem(CITY_STORAGE_KEY),
-        AsyncStorage.removeItem(UNIVERSITY_STORAGE_KEY),
-        AsyncStorage.removeItem(DORM_STORAGE_KEY),
-      ]);
+      await Promise.all(
+        STORAGE_KEYS.map((key) => AsyncStorage.removeItem(key))
+      );
+
+      // Clear any session data from AsyncStorage that Supabase might be using
+      const SUPABASE_KEYS = await AsyncStorage.getAllKeys();
+      const supabaseKeys = SUPABASE_KEYS.filter(
+        (key) =>
+          key.startsWith("sb-") ||
+          key.includes("supabase") ||
+          key.includes("auth")
+      );
+
+      if (supabaseKeys.length > 0) {
+        await Promise.all(
+          supabaseKeys.map((key) => AsyncStorage.removeItem(key))
+        );
+      }
 
       // Now sign out from Supabase
       const { error } = await supabase.auth.signOut();
-      return !error;
+
+      if (error) {
+        console.error("Supabase sign out error:", error);
+        // Even if Supabase fails, still consider it a success since we've cleared the local state
+        return true;
+      }
+
+      return true;
     } catch (err) {
       console.error("Sign out error:", err);
-      return false;
+      // Return true anyway to ensure the user is logged out in the UI
+      // This is safer than keeping them logged in when they want to log out
+      return true;
     }
   };
 

@@ -73,6 +73,27 @@ function LoginScreen({ navigation }: LoginScreenProps) {
     try {
       setIsLoading(true);
       console.log("Attempting login with email:", email);
+
+      // Make sure network is available - using timeout promise instead of AbortSignal.timeout
+      const networkTest = await Promise.race([
+        fetch("https://www.google.com", { method: "HEAD" }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 5000)
+        ),
+      ]).catch((err) => {
+        console.log("Network test failed:", err);
+        return null;
+      });
+
+      if (!networkTest) {
+        Alert.alert(
+          "Bağlantı Hatası",
+          "İnternet bağlantınızı kontrol edip tekrar deneyiniz."
+        );
+        setIsLoading(false);
+        return;
+      }
+
       const result = await signIn(email, password);
 
       console.log("Login result:", JSON.stringify(result, null, 2));
@@ -88,6 +109,12 @@ function LoginScreen({ navigation }: LoginScreenProps) {
           } else if (result.message.includes("Email not confirmed")) {
             errorMessage =
               "E-posta adresinizi doğrulamanız gerekiyor. Lütfen gelen kutunuzu kontrol edin.";
+          } else if (
+            result.message.includes("network") ||
+            result.message.includes("unavailable")
+          ) {
+            errorMessage =
+              "İnternet bağlantısı hatası. Lütfen bağlantınızı kontrol edip tekrar deneyin.";
           }
         }
 
@@ -97,11 +124,15 @@ function LoginScreen({ navigation }: LoginScreenProps) {
         // Navigation will be handled by the useEffect hook when isAuthenticated becomes true
       }
     } catch (error) {
-      Alert.alert(
-        "Hata",
-        "Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyiniz."
-      );
       console.error("Login error:", error);
+
+      // More descriptive error message
+      const errorMessage =
+        error instanceof Error && error.message.includes("network")
+          ? "İnternet bağlantınızı kontrol edip tekrar deneyiniz."
+          : "Giriş yapılırken bir hata oluştu. Lütfen tekrar deneyiniz.";
+
+      Alert.alert("Hata", errorMessage);
     } finally {
       setIsLoading(false);
     }

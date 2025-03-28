@@ -167,11 +167,56 @@ function ProfileScreen() {
   const handleLogout = async () => {
     setIsLoading(true);
     try {
-      await signOut();
+      // Display a confirmation alert
+      Alert.alert(
+        "Çıkış Yap",
+        "Hesabınızdan çıkış yapmak istediğinize emin misiniz?",
+        [
+          {
+            text: "İptal",
+            style: "cancel",
+            onPress: () => setIsLoading(false),
+          },
+          {
+            text: "Çıkış Yap",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                const success = await signOut();
+
+                if (!success) {
+                  Alert.alert(
+                    "Hata",
+                    "Çıkış yapılırken bir hata oluştu. Lütfen tekrar deneyin."
+                  );
+                }
+
+                // Forcefully clear user-specific state from the profile screen
+                setDormitoryName("Yurt seçilmedi");
+                setCityName("Şehir seçilmedi");
+                setUniversityName("Üniversite seçilmedi");
+                forceRefreshPreferences();
+              } catch (error) {
+                console.error("Error during logout process:", error);
+                Alert.alert(
+                  "Hata",
+                  "Çıkış yapılırken bir hata oluştu. Lütfen tekrar deneyin."
+                );
+              } finally {
+                setIsLoading(false);
+              }
+            },
+          },
+        ],
+        { cancelable: false }
+      );
     } catch (error) {
       console.error("Error signing out:", error);
-    } finally {
       setIsLoading(false);
+      Alert.alert(
+        "Hata",
+        "Çıkış yapılırken bir hata oluştu. Lütfen tekrar deneyin."
+      );
     }
   };
 

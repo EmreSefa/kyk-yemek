@@ -1,119 +1,23 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TextInput,
   Pressable,
-  FlatList,
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   useColorScheme,
   ScrollView,
-  Keyboard,
-  TouchableWithoutFeedback,
+  TouchableOpacity,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../hooks/useAuth";
 import { useMealComments, MealComment } from "../hooks/useMealComments";
 import { formatDistanceToNow } from "date-fns";
 import { tr } from "date-fns/locale";
-
-interface CommentItemProps {
-  comment: MealComment;
-  onDelete: (comment: MealComment) => void;
-  isCurrentUser: boolean;
-}
-
-const CommentItem = ({
-  comment,
-  onDelete,
-  isCurrentUser,
-}: CommentItemProps) => {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-
-  // Format the date as "X minutes/hours/days ago"
-  const formattedDate = formatDistanceToNow(new Date(comment.created_at), {
-    addSuffix: true,
-    locale: tr,
-  });
-
-  // Get display name with fallback to username or anonymous
-  const displayName =
-    comment.profiles?.display_name ||
-    comment.user_id.substring(0, 8) ||
-    "Anonim Kullanıcı";
-
-  return (
-    <View
-      style={[
-        styles.commentItem,
-        isDark ? styles.commentItemDark : styles.commentItemLight,
-      ]}
-    >
-      <View style={styles.commentHeader}>
-        <View style={styles.userInfo}>
-          <View
-            style={[
-              styles.avatarCircle,
-              isDark ? styles.avatarCircleDark : styles.avatarCircleLight,
-            ]}
-          >
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          <View>
-            <Text
-              style={[
-                styles.userName,
-                isDark ? styles.userNameDark : styles.userNameLight,
-              ]}
-            >
-              {displayName}
-            </Text>
-            <Text
-              style={[
-                styles.commentDate,
-                isDark ? styles.commentDateDark : styles.commentDateLight,
-              ]}
-            >
-              {formattedDate}
-            </Text>
-          </View>
-        </View>
-
-        {isCurrentUser && (
-          <View style={styles.commentActions}>
-            <Pressable
-              style={styles.actionButton}
-              onPress={() => onDelete(comment)}
-              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
-            >
-              <Ionicons
-                name="trash"
-                size={16}
-                color={isDark ? "#CCCCCC" : "#666666"}
-              />
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      <Text
-        style={[
-          styles.commentText,
-          isDark ? styles.commentTextDark : styles.commentTextLight,
-        ]}
-      >
-        {comment.comment}
-      </Text>
-    </View>
-  );
-};
 
 interface CommentsSectionProps {
   mealId: number;
@@ -123,7 +27,6 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const { user } = useAuth();
-  const inputRef = useRef<TextInput>(null);
   const {
     comments,
     isLoading,
@@ -134,15 +37,8 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
   } = useMealComments(mealId);
 
   const [newComment, setNewComment] = useState("");
-  const [isFocused, setIsFocused] = useState(false);
 
-  // Handle focusing the input
-  const focusInput = () => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  };
-
+  // Handle adding a new comment
   const handleAddComment = async () => {
     if (!user) {
       Alert.alert(
@@ -160,7 +56,8 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
     }
   };
 
-  const confirmDeleteComment = (comment: MealComment) => {
+  // Handle deleting a comment
+  const handleDeleteComment = (commentId: number) => {
     Alert.alert("Yorumu Sil", "Bu yorumu silmek istediğinizden emin misiniz?", [
       {
         text: "İptal",
@@ -169,13 +66,95 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
       {
         text: "Sil",
         style: "destructive",
-        onPress: () => deleteComment(comment.id),
+        onPress: () => deleteComment(commentId),
       },
     ]);
   };
 
+  // Render a single comment
+  const renderComment = (comment: MealComment) => {
+    const isCurrentUser = user?.id === comment.user_id;
+    const displayName =
+      comment.profiles?.display_name ||
+      comment.user_id.substring(0, 8) ||
+      "Anonim Kullanıcı";
+
+    const formattedDate = formatDistanceToNow(new Date(comment.created_at), {
+      addSuffix: true,
+      locale: tr,
+    });
+
+    return (
+      <View
+        key={comment.id}
+        style={[
+          styles.commentItem,
+          isDark ? styles.commentItemDark : styles.commentItemLight,
+        ]}
+      >
+        <View style={styles.commentHeader}>
+          <View style={styles.userInfo}>
+            <View
+              style={[
+                styles.avatarCircle,
+                isDark ? styles.avatarCircleDark : styles.avatarCircleLight,
+              ]}
+            >
+              <Text style={styles.avatarText}>
+                {displayName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <View>
+              <Text
+                style={[
+                  styles.userName,
+                  isDark ? styles.userNameDark : styles.userNameLight,
+                ]}
+              >
+                {displayName}
+              </Text>
+              <Text
+                style={[
+                  styles.commentDate,
+                  isDark ? styles.commentDateDark : styles.commentDateLight,
+                ]}
+              >
+                {formattedDate}
+              </Text>
+            </View>
+          </View>
+
+          {isCurrentUser && (
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => handleDeleteComment(comment.id)}
+            >
+              <Ionicons
+                name="trash-outline"
+                size={16}
+                color={isDark ? "#CCCCCC" : "#666666"}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <Text
+          style={[
+            styles.commentText,
+            isDark ? styles.commentTextDark : styles.commentTextLight,
+          ]}
+        >
+          {comment.comment}
+        </Text>
+      </View>
+    );
+  };
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
+    >
       <View style={styles.headerContainer}>
         <Text
           style={[
@@ -195,10 +174,12 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
         </Text>
       </View>
 
+      {/* Comments List */}
       {isLoading ? (
         <ActivityIndicator
           size="small"
           color={isDark ? "#FFFFFF" : "#000000"}
+          style={styles.loader}
         />
       ) : error ? (
         <Text
@@ -219,73 +200,49 @@ export function CommentsSection({ mealId }: CommentsSectionProps) {
           Henüz yorum yapılmamış. İlk yorumu siz yapın!
         </Text>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.commentsList}
-          keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={true}
-        >
-          {comments.map((item) => (
-            <CommentItem
-              key={item.id.toString()}
-              comment={item}
-              onDelete={confirmDeleteComment}
-              isCurrentUser={user?.id === item.user_id}
-            />
-          ))}
+        <ScrollView contentContainerStyle={styles.commentsList}>
+          {comments.map(renderComment)}
         </ScrollView>
       )}
 
-      {/* Comment input area */}
-      <View style={styles.inputWrapper}>
-        <View
+      {/* Comment Input Section */}
+      <View
+        style={[
+          styles.inputContainer,
+          isDark ? styles.inputContainerDark : styles.inputContainerLight,
+        ]}
+      >
+        <TextInput
+          style={[styles.input, isDark ? styles.inputDark : styles.inputLight]}
+          placeholder="Yorumunuzu yazın..."
+          placeholderTextColor={isDark ? "#AAAAAA" : "#999999"}
+          value={newComment}
+          onChangeText={setNewComment}
+          multiline
+        />
+        <TouchableOpacity
           style={[
-            styles.inputContainer,
-            isDark ? styles.inputContainerDark : styles.inputContainerLight,
-            isFocused && styles.inputContainerFocused,
+            styles.sendButton,
+            !newComment.trim() && styles.sendButtonDisabled,
           ]}
+          disabled={!newComment.trim() || isSubmitting}
+          onPress={handleAddComment}
         >
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.input,
-              isDark ? styles.inputDark : styles.inputLight,
-            ]}
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder="Bir yorum yazın..."
-            placeholderTextColor={isDark ? "#AAAAAA" : "#999999"}
-            multiline={true}
-            numberOfLines={1}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            blurOnSubmit={false}
-            scrollEnabled={false}
-          />
-          <Pressable
-            style={[
-              styles.sendButton,
-              isDark ? styles.sendButtonDark : styles.sendButtonLight,
-              (!newComment.trim() || isSubmitting) && styles.disabledButton,
-            ]}
-            onPress={handleAddComment}
-            disabled={!newComment.trim() || isSubmitting}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="send" size={20} color="#FFFFFF" />
-            )}
-          </Pressable>
-        </View>
+          {isSubmitting ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Ionicons name="send" size={18} color="white" />
+          )}
+        </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flex: 1,
+    padding: 16,
   },
   headerContainer: {
     flexDirection: "row",
@@ -304,21 +261,23 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   commentCount: {
-    fontSize: 14,
-    backgroundColor: "rgba(0,0,0,0.05)",
+    fontSize: 16,
     paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 10,
+    borderRadius: 12,
   },
   commentCountLight: {
+    backgroundColor: "#E0E0E0",
     color: "#666666",
   },
   commentCountDark: {
-    color: "#AAAAAA",
+    backgroundColor: "#444444",
+    color: "#CCCCCC",
   },
   commentsList: {
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
+  // Comment Item Styles
   commentItem: {
     padding: 12,
     borderRadius: 8,
@@ -328,12 +287,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
   },
   commentItemDark: {
-    backgroundColor: "#2A2A2C",
+    backgroundColor: "#2A2A2A",
   },
   commentHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     marginBottom: 8,
   },
   userInfo: {
@@ -352,19 +311,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#4A6572",
   },
   avatarCircleDark: {
-    backgroundColor: "#687F8C",
+    backgroundColor: "#738F9E",
   },
   avatarText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+    color: "white",
+    fontSize: 14,
     fontWeight: "bold",
   },
   userName: {
-    fontWeight: "600",
+    fontWeight: "500",
     fontSize: 14,
   },
   userNameLight: {
-    color: "#000000",
+    color: "#333333",
   },
   userNameDark: {
     color: "#FFFFFF",
@@ -373,16 +332,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   commentDateLight: {
-    color: "#666666",
+    color: "#888888",
   },
   commentDateDark: {
-    color: "#AAAAAA",
+    color: "#BBBBBB",
   },
-  commentActions: {
-    flexDirection: "row",
-  },
-  actionButton: {
-    paddingHorizontal: 8,
+  deleteButton: {
+    padding: 4,
   },
   commentText: {
     fontSize: 14,
@@ -394,77 +350,69 @@ const styles = StyleSheet.create({
   commentTextDark: {
     color: "#EEEEEE",
   },
-  inputWrapper: {
-    marginTop: 8,
-    width: "100%",
-  },
+  // Input Section Styles
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
+    marginTop: 8,
+    borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    minHeight: 48,
   },
   inputContainerLight: {
-    backgroundColor: "#F5F5F5",
+    backgroundColor: "#F0F0F0",
   },
   inputContainerDark: {
-    backgroundColor: "#2A2A2C",
+    backgroundColor: "#2A2A2A",
   },
   input: {
     flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
     fontSize: 14,
     maxHeight: 100,
   },
   inputLight: {
-    color: "#000000",
+    color: "#333333",
   },
   inputDark: {
     color: "#FFFFFF",
   },
   sendButton: {
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    backgroundColor: "#4A6572",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     marginLeft: 8,
   },
-  sendButtonLight: {
-    backgroundColor: "#4A6572",
+  sendButtonDisabled: {
+    backgroundColor: "#AAAAAA",
   },
-  sendButtonDark: {
-    backgroundColor: "#687F8C",
-  },
-  disabledButton: {
-    opacity: 0.5,
+  // Misc Styles
+  loader: {
+    marginVertical: 20,
   },
   errorText: {
-    padding: 16,
     textAlign: "center",
-    fontSize: 14,
+    marginVertical: 16,
   },
   errorTextLight: {
-    color: "#FF3B30",
+    color: "#E53935",
   },
   errorTextDark: {
-    color: "#FF6B6B",
+    color: "#FF8A80",
   },
   noCommentsText: {
-    padding: 16,
     textAlign: "center",
-    fontSize: 14,
+    marginVertical: 20,
     fontStyle: "italic",
   },
   noCommentsTextLight: {
-    color: "#666666",
+    color: "#999999",
   },
   noCommentsTextDark: {
-    color: "#AAAAAA",
-  },
-  inputContainerFocused: {
-    borderWidth: 1,
-    borderColor: "#4A6572",
+    color: "#BBBBBB",
   },
 });

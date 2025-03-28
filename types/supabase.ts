@@ -40,7 +40,7 @@ export interface Database {
           city_id?: number;
         };
       };
-      meals: {
+      city_menus: {
         Row: {
           id: number;
           meal_date: string;
@@ -49,6 +49,7 @@ export interface Database {
           dorm_id: number | null;
           created_at: string;
           updated_at: string;
+          menu_items_text: string | null;
         };
         Insert: {
           id?: number;
@@ -58,6 +59,7 @@ export interface Database {
           dorm_id?: number | null;
           created_at?: string;
           updated_at?: string;
+          menu_items_text?: string | null;
         };
         Update: {
           id?: number;
@@ -67,26 +69,27 @@ export interface Database {
           dorm_id?: number | null;
           created_at?: string;
           updated_at?: string;
+          menu_items_text?: string | null;
         };
       };
       meal_items: {
         Row: {
           id: number;
-          meal_id: number;
+          city_menu_id: number;
           item_name: string;
           calories: number | null;
           description: string | null;
         };
         Insert: {
           id?: number;
-          meal_id: number;
+          city_menu_id: number;
           item_name: string;
           calories?: number | null;
           description?: string | null;
         };
         Update: {
           id?: number;
-          meal_id?: number;
+          city_menu_id?: number;
           item_name?: string;
           calories?: number | null;
           description?: string | null;

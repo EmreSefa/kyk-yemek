@@ -92,7 +92,36 @@ export const useMeals = () => {
       // Get fresh ratings for this meal
       const ratings = await mealService.getMealRatings(mealId);
 
-      // Update the meal in todayMeals state if it exists there
+      // First, find the meal details to ensure consistent updates across both states
+      let mealDate = "";
+      let mealType = "";
+
+      // Check in todayMeals first
+      if (todayMeals.breakfast?.id === mealId) {
+        mealDate = todayMeals.breakfast.meal_date;
+        mealType = "BREAKFAST";
+      } else if (todayMeals.dinner?.id === mealId) {
+        mealDate = todayMeals.dinner.meal_date;
+        mealType = "DINNER";
+      }
+
+      // If not found in todayMeals, check weeklyMeals
+      if (!mealDate) {
+        for (const day of weeklyMeals) {
+          if (day.breakfast?.id === mealId) {
+            mealDate = day.breakfast.meal_date;
+            mealType = "BREAKFAST";
+            break;
+          }
+          if (day.dinner?.id === mealId) {
+            mealDate = day.dinner.meal_date;
+            mealType = "DINNER";
+            break;
+          }
+        }
+      }
+
+      // Update the meal in todayMeals state
       setTodayMeals((current) => {
         const updated = { ...current };
 
@@ -112,6 +141,45 @@ export const useMeals = () => {
             dislikes: ratings.dislikes,
             userRating: newRating,
           };
+        }
+
+        // Also check if today's meals include the meal that was rated in the weekly view
+        // by comparing meal dates and types
+        if (mealDate && mealType) {
+          const today = new Date().toISOString().split("T")[0];
+          const mealDateStr = new Date(mealDate).toISOString().split("T")[0];
+
+          if (mealDateStr === today) {
+            if (
+              mealType === "BREAKFAST" &&
+              updated.breakfast &&
+              updated.breakfast.id !== mealId
+            ) {
+              // Found a breakfast meal for the same date but different ID (data inconsistency)
+              // Update it anyway to keep UI consistent
+              updated.breakfast = {
+                ...updated.breakfast,
+                likes: ratings.likes,
+                dislikes: ratings.dislikes,
+                userRating: newRating,
+              };
+            }
+
+            if (
+              mealType === "DINNER" &&
+              updated.dinner &&
+              updated.dinner.id !== mealId
+            ) {
+              // Found a dinner meal for the same date but different ID (data inconsistency)
+              // Update it anyway to keep UI consistent
+              updated.dinner = {
+                ...updated.dinner,
+                likes: ratings.likes,
+                dislikes: ratings.dislikes,
+                userRating: newRating,
+              };
+            }
+          }
         }
 
         return updated;
@@ -138,6 +206,44 @@ export const useMeals = () => {
               dislikes: ratings.dislikes,
               userRating: newRating,
             };
+          }
+
+          // Also check if this daily meal is for the same date as the rated meal
+          if (mealDate) {
+            const mealDateStr = new Date(mealDate).toISOString().split("T")[0];
+            const dailyDateStr = format(dailyMeal.date, "yyyy-MM-dd");
+
+            if (mealDateStr === dailyDateStr) {
+              if (
+                mealType === "BREAKFAST" &&
+                dailyMeal.breakfast &&
+                dailyMeal.breakfast.id !== mealId
+              ) {
+                // Found a breakfast meal for the same date but different ID (data inconsistency)
+                // Update it anyway to keep UI consistent
+                updated[index].breakfast = {
+                  ...updated[index].breakfast!,
+                  likes: ratings.likes,
+                  dislikes: ratings.dislikes,
+                  userRating: newRating,
+                };
+              }
+
+              if (
+                mealType === "DINNER" &&
+                dailyMeal.dinner &&
+                dailyMeal.dinner.id !== mealId
+              ) {
+                // Found a dinner meal for the same date but different ID (data inconsistency)
+                // Update it anyway to keep UI consistent
+                updated[index].dinner = {
+                  ...updated[index].dinner!,
+                  likes: ratings.likes,
+                  dislikes: ratings.dislikes,
+                  userRating: newRating,
+                };
+              }
+            }
           }
         });
 

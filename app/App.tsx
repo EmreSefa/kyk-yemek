@@ -97,10 +97,29 @@ function RootNavigator() {
 
   // Force reload of the component when needed
   const recheckOnboardingStatus = () => {
+    console.log("Forcing onboarding status recheck...");
     setRefreshTrigger((prev) => prev + 1);
     setCheckingOnboarding(true);
     checkOnboardingStatusAsync();
   };
+
+  // Function to listen for onboarding completion event
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const checkOnboardingInterval = setInterval(async () => {
+        const onboardingCompleted = await AsyncStorage.getItem(
+          "kyk_yemek_onboarding_completed"
+        );
+        if (onboardingCompleted === "true" && !hasCompletedOnboarding) {
+          console.log("Detected onboarding completion, refreshing...");
+          recheckOnboardingStatus();
+          clearInterval(checkOnboardingInterval);
+        }
+      }, 1000); // Check every second if onboarding was completed
+
+      return () => clearInterval(checkOnboardingInterval);
+    }
+  }, [isAuthenticated, user, hasCompletedOnboarding]);
 
   // Check if user has completed onboarding
   async function checkOnboardingStatusAsync() {
@@ -111,45 +130,42 @@ function RootNavigator() {
     }
 
     try {
-      // First check for explicit onboarding completion flag
-      const onboardingCompleted = await AsyncStorage.getItem(
-        "kyk_yemek_onboarding_completed"
+      console.log("Checking onboarding status for user:", user.id);
+
+      // Try to get user preferences from AsyncStorage first (faster)
+      const [cityIdStr, dormIdStr, onboardingCompleted] = await Promise.all([
+        AsyncStorage.getItem("kyk_yemek_selected_city"),
+        AsyncStorage.getItem("kyk_yemek_selected_dorm"),
+        AsyncStorage.getItem("kyk_yemek_onboarding_completed"),
+      ]);
+
+      console.log(
+        "Initial preferences from AsyncStorage:",
+        JSON.stringify({ cityIdStr, dormIdStr, onboardingCompleted })
       );
 
-      if (onboardingCompleted === "true") {
-        console.log("Onboarding explicitly marked as completed");
+      // If we have preferences in AsyncStorage, use them
+      if (cityIdStr && dormIdStr && onboardingCompleted === "true") {
+        console.log("Found complete preferences in AsyncStorage");
         setHasCompletedOnboarding(true);
         setCheckingOnboarding(false);
         return;
       }
 
-      // Try to get from AsyncStorage first (faster)
-      const cityId = await AsyncStorage.getItem("kyk_yemek_selected_city");
-      const dormId = await AsyncStorage.getItem("kyk_yemek_selected_dorm");
-
-      // Consider onboarding complete if at least city and dorm are selected
-      if (cityId && dormId) {
-        setHasCompletedOnboarding(true);
-        setCheckingOnboarding(false);
-
-        // Mark onboarding as completed for future reference
-        await AsyncStorage.setItem("kyk_yemek_onboarding_completed", "true");
-        return;
-      }
-
-      // If we don't have sufficient preferences in AsyncStorage, check database
+      // If not in AsyncStorage, check Supabase for user preferences
       const { data, error } = await supabase
-        .from("users")
-        .select("city_id, university_id, dormitory_id")
-        .eq("id", user.id);
+        .from("user_preferences")
+        .select("*")
+        .eq("user_id", user.id);
 
-      // User record might not exist yet or might not have any preferences
       if (error) {
-        console.error("Database error when fetching user preferences:", error);
+        console.error("Error fetching user preferences:", error);
         setHasCompletedOnboarding(false);
         setCheckingOnboarding(false);
         return;
       }
+
+      console.log("Fetched user preferences:", data);
 
       // Check if we have any user data
       if (data && data.length > 0) {
@@ -195,9 +211,19 @@ function RootNavigator() {
     if (isAuthenticated && user) {
       checkOnboardingStatusAsync();
     } else {
+      // Clear onboarding state when user logs out
+      setHasCompletedOnboarding(false);
       setCheckingOnboarding(false);
     }
   }, [isAuthenticated, user, refreshTrigger]);
+
+  // Effect to reset navigation when user logs out
+  useEffect(() => {
+    if (!isAuthenticated && !isLoading) {
+      // User has logged out, ensure we're showing the Auth navigator
+      setHasCompletedOnboarding(false);
+    }
+  }, [isAuthenticated, isLoading]);
 
   if (isLoading || (isAuthenticated && checkingOnboarding)) {
     return (
@@ -222,9 +248,23 @@ function RootNavigator() {
         screenOptions={{ headerShown: false }}
         initialRouteName={initialRoute}
       >
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-        <Stack.Screen name="Main" component={MainTabNavigator} />
-        <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
+        {isAuthenticated ? (
+          // Show either Main or Onboarding screens when authenticated
+          <>
+            {hasCompletedOnboarding ? (
+              <Stack.Screen name="Main" component={MainTabNavigator} />
+            ) : (
+              <Stack.Screen name="Onboarding" component={OnboardingNavigator} />
+            )}
+          </>
+        ) : (
+          // Show Auth screen when not authenticated
+          <Stack.Screen
+            name="Auth"
+            component={AuthNavigator}
+            options={{ animationTypeForReplace: "pop" }}
+          />
+        )}
       </Stack.Navigator>
       <NotificationInitializer />
       <WidgetInitializer />

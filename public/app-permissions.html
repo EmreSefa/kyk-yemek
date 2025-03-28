@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KYKYemek App Permissions & Compliance</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      h1 {
+        font-size: 2em;
+        border-bottom: 1px solid #eaecef;
+        padding-bottom: 0.3em;
+      }
+      h2 {
+        font-size: 1.5em;
+        margin-top: 24px;
+        margin-bottom: 16px;
+        font-weight: 600;
+        line-height: 1.25;
+        border-bottom: 1px solid #eaecef;
+        padding-bottom: 0.3em;
+      }
+      h3 {
+        font-size: 1.25em;
+        margin-top: 24px;
+        margin-bottom: 16px;
+        font-weight: 600;
+        line-height: 1.25;
+      }
+      p,
+      ul,
+      ol {
+        margin-bottom: 16px;
+      }
+      ul,
+      ol {
+        padding-left: 2em;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      .permission-item {
+        background-color: #f6f8fa;
+        border-radius: 5px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .permission-name {
+        font-weight: bold;
+        color: #0366d6;
+      }
+      .check-mark {
+        color: #28a745;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>KYKYemek App Permissions & Compliance</h1>
+
+    <h2>Required App Permissions</h2>
+    <p>
+      Below are the permissions required by the KYKYemek app, with justification
+      for each:
+    </p>
+
+    <div class="permission-item">
+      <h3>1. Internet Access</h3>
+      <p>
+        <span class="permission-name">Permission:</span>
+        <code>android.permission.INTERNET</code> / iOS Internet capability
+      </p>
+      <p>
+        <strong>Justification:</strong> Essential for core app functionality to
+        connect to Supabase backend, retrieve meal data, user authentication,
+        and synchronize user preferences.
+      </p>
+      <p>
+        <strong>Data Impact:</strong> Allows sending and receiving data as
+        detailed in our Privacy Policy.
+      </p>
+    </div>
+
+    <div class="permission-item">
+      <h3>2. Network State</h3>
+      <p>
+        <span class="permission-name">Permission:</span>
+        <code>android.permission.ACCESS_NETWORK_STATE</code> / iOS Network
+        capability
+      </p>
+      <p>
+        <strong>Justification:</strong> Enables the app to detect network
+        availability to provide appropriate offline functionality and error
+        messages.
+      </p>
+      <p>
+        <strong>Data Impact:</strong> No personal data is collected, only
+        network connectivity status.
+      </p>
+    </div>
+
+    <div class="permission-item">
+      <h3>3. Camera (Optional)</h3>
+      <p>
+        <span class="permission-name">Permission:</span>
+        <code>android.permission.CAMERA</code> / iOS Camera capability
+      </p>
+      <p>
+        <strong>Justification:</strong> Optional feature allowing users to
+        upload profile pictures or scan QR codes for quick access to meal
+        information.
+      </p>
+      <p>
+        <strong>Data Impact:</strong> Camera data is only processed when the
+        user explicitly initiates a photo action. Images may be stored as
+        profile pictures with user consent.
+      </p>
+    </div>
+
+    <div class="permission-item">
+      <h3>4. Storage (Optional)</h3>
+      <p>
+        <span class="permission-name">Permission:</span>
+        <code>android.permission.READ_EXTERNAL_STORAGE</code> / iOS Photo
+        Library capability
+      </p>
+      <p>
+        <strong>Justification:</strong> Enables users to select existing photos
+        for profile pictures from their device gallery.
+      </p>
+      <p>
+        <strong>Data Impact:</strong> The app only accesses photos explicitly
+        selected by the user.
+      </p>
+    </div>
+
+    <div class="permission-item">
+      <h3>5. Notifications</h3>
+      <p>
+        <span class="permission-name">Permission:</span>
+        <code>android.permission.POST_NOTIFICATIONS</code> / iOS Notification
+        capability
+      </p>
+      <p>
+        <strong>Justification:</strong> Allows sending timely alerts about meal
+        availability, updates to meal options, or important service
+        announcements.
+      </p>
+      <p>
+        <strong>Data Impact:</strong> Processing of device token to enable push
+        notifications delivery.
+      </p>
+    </div>
+
+    <h2>Regulatory Compliance Assessment</h2>
+
+    <h3>GDPR Compliance (European Union)</h3>
+    <p>Our app implements the following GDPR requirements:</p>
+    <ol>
+      <li>
+        <strong>Lawful Basis for Processing:</strong> We process data based on
+        legitimate interests (app functionality) and explicit user consent.
+      </li>
+      <li>
+        <strong>Data Minimization:</strong> We only collect information
+        necessary for app functionality.
+      </li>
+      <li>
+        <strong>Transparency:</strong> Our Privacy Policy clearly describes all
+        data collection and processing.
+      </li>
+      <li>
+        <strong>User Rights Implementation:</strong> We provide mechanisms for
+        users to:
+        <ul>
+          <li>Access their personal data</li>
+          <li>Request correction of inaccurate data</li>
+          <li>Request deletion of their data</li>
+          <li>Export their data in a portable format</li>
+          <li>Object to certain processing</li>
+          <li>Withdraw consent</li>
+        </ul>
+      </li>
+      <li>
+        <strong>Data Security:</strong> We implement encryption and secure
+        development practices as detailed in our Privacy Policy.
+      </li>
+      <li>
+        <strong>Breach Notification Process:</strong> We have procedures to
+        detect and report data breaches within 72 hours.
+      </li>
+    </ol>
+
+    <h3>CCPA Compliance (California, USA)</h3>
+    <p>Our app implements the following CCPA requirements:</p>
+    <ol>
+      <li>
+        <strong>Disclosure Requirements:</strong> Our Privacy Policy discloses
+        categories of personal information collected and the purposes of
+        collection.
+      </li>
+      <li>
+        <strong>Right to Know:</strong> Users can request disclosure of personal
+        information collected about them.
+      </li>
+      <li>
+        <strong>Right to Delete:</strong> We provide mechanisms for users to
+        request deletion of their personal data.
+      </li>
+      <li>
+        <strong>Right to Opt-Out:</strong> We do not sell personal information,
+        making the opt-out right not applicable.
+      </li>
+      <li>
+        <strong>Non-Discrimination:</strong> We do not discriminate against
+        users exercising their CCPA rights.
+      </li>
+    </ol>
+
+    <h3>Additional Regional Compliance</h3>
+    <ul>
+      <li>
+        <strong>LGPD (Brazil):</strong> Our data practices align with Brazil's
+        General Data Protection Law requirements.
+      </li>
+      <li>
+        <strong>POPI Act (South Africa):</strong> We comply with South Africa's
+        Protection of Personal Information Act provisions.
+      </li>
+    </ul>
+
+    <h2>Compliance Verification</h2>
+    <p>
+      The KYKYemek app has been designed with privacy by design principles.
+      Based on our assessment:
+    </p>
+    <ol>
+      <li>
+        <span class="check-mark">✅</span>
+        <strong>Our app complies with GDPR requirements</strong>
+      </li>
+      <li>
+        <span class="check-mark">✅</span>
+        <strong>Our app complies with CCPA requirements</strong>
+      </li>
+      <li>
+        <span class="check-mark">✅</span>
+        <strong
+          >Our Privacy Policy accurately reflects our data practices</strong
+        >
+      </li>
+      <li>
+        <span class="check-mark">✅</span>
+        <strong
+          >We collect only the minimum necessary data for app
+          functionality</strong
+        >
+      </li>
+      <li>
+        <span class="check-mark">✅</span>
+        <strong
+          >We implement appropriate technical and organizational security
+          measures</strong
+        >
+      </li>
+    </ol>
+
+    <h2>Ongoing Compliance Measures</h2>
+    <p>To maintain compliance, we conduct:</p>
+    <ol>
+      <li>Regular privacy impact assessments</li>
+      <li>Periodic review and updates to the Privacy Policy</li>
+      <li>Staff training on data protection requirements</li>
+      <li>Security assessments of our systems and third-party providers</li>
+      <li>Monitoring of regulatory changes in key jurisdictions</li>
+    </ol>
+
+    <p>
+      For specific compliance questions or to exercise your data rights, please
+      contact us at
+      <a href="mailto:contact@vestauni.com">contact@vestauni.com</a>.
+    </p>
+  </body>
+</html>

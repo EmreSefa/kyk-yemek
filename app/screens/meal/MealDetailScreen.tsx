@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useMeals, Meal, MealItem } from "../../hooks/useMeals";
 import { Ionicons } from "@expo/vector-icons";
@@ -63,6 +65,19 @@ export function MealDetailScreen({
   const { todayMeals, weeklyMeals, rateMeal } = useMeals();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Dismiss keyboard when screen loads to avoid immediate keyboard opening
+  useEffect(() => {
+    Keyboard.dismiss();
+
+    // Simulate a slight loading delay while we prepare the data
+    const loadingTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 300);
+
+    return () => clearTimeout(loadingTimer);
+  }, []);
 
   // Find the meal from either today's meals or weekly meals
   const findMeal = (): Meal | null => {
@@ -88,6 +103,92 @@ export function MealDetailScreen({
   };
 
   const meal = findMeal();
+
+  // Loading UI with placeholder content
+  if (isLoading) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.container,
+          isDark ? styles.containerDark : styles.containerLight,
+        ]}
+      >
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={onClose}>
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={isDark ? "#FFFFFF" : "#000000"}
+            />
+          </Pressable>
+          <Text
+            style={[
+              styles.headerTitle,
+              isDark ? styles.textDark : styles.textLight,
+            ]}
+          >
+            {mealType === "BREAKFAST" ? "Kahvaltı" : "Akşam Yemeği"}
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator
+            size="large"
+            color={isDark ? "#4A8CFF" : "#4A6572"}
+          />
+          <Text
+            style={[
+              styles.loadingText,
+              isDark ? styles.textDark : styles.textLight,
+            ]}
+          >
+            Yemek bilgileri yükleniyor...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // If no meal data is found
+  if (!meal) {
+    return (
+      <SafeAreaView
+        style={[
+          styles.container,
+          isDark ? styles.containerDark : styles.containerLight,
+        ]}
+      >
+        <View style={styles.header}>
+          <Pressable style={styles.backButton} onPress={onClose}>
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color={isDark ? "#FFFFFF" : "#000000"}
+            />
+          </Pressable>
+          <Text
+            style={[
+              styles.headerTitle,
+              isDark ? styles.textDark : styles.textLight,
+            ]}
+          >
+            Yemek Detayı
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.content}>
+          <Text
+            style={[
+              styles.noMealText,
+              isDark ? styles.textDark : styles.textLight,
+            ]}
+          >
+            Yemek bilgisi bulunamadı.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   // Helper function to get all meal items
   const getMealItems = (meal: Meal | null): MealItem[] => {
@@ -186,46 +287,6 @@ export function MealDetailScreen({
     if (!meal) return;
     await rateMeal(meal.id, rating);
   };
-
-  if (!meal) {
-    return (
-      <SafeAreaView
-        style={[
-          styles.container,
-          isDark ? styles.containerDark : styles.containerLight,
-        ]}
-      >
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={onClose}>
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={isDark ? "#FFFFFF" : "#000000"}
-            />
-          </Pressable>
-          <Text
-            style={[
-              styles.headerTitle,
-              isDark ? styles.textDark : styles.textLight,
-            ]}
-          >
-            Yemek Detayı
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.content}>
-          <Text
-            style={[
-              styles.noMealText,
-              isDark ? styles.textDark : styles.textLight,
-            ]}
-          >
-            Yemek bilgisi bulunamadı.
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   // Define sections for FlatList
   const sections = [
@@ -472,40 +533,43 @@ export function MealDetailScreen({
       ]}
       keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 20}
     >
-      <SafeAreaView style={{ flex: 1 }}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={onClose}>
-            <Ionicons
-              name="arrow-back"
-              size={24}
-              color={isDark ? "#FFFFFF" : "#000000"}
-            />
-          </Pressable>
-          <Text
-            style={[
-              styles.headerTitle,
-              isDark ? styles.textDark : styles.textLight,
-            ]}
-          >
-            {mealType === "BREAKFAST" ? "Kahvaltı" : "Akşam Yemeği"}
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+          <View style={styles.header}>
+            <Pressable style={styles.backButton} onPress={onClose}>
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={isDark ? "#FFFFFF" : "#000000"}
+              />
+            </Pressable>
+            <Text
+              style={[
+                styles.headerTitle,
+                isDark ? styles.textDark : styles.textLight,
+              ]}
+            >
+              {mealType === "BREAKFAST" ? "Kahvaltı" : "Akşam Yemeği"}
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-        <FlatList
-          style={styles.container}
-          contentContainerStyle={[
-            styles.content,
-            { paddingBottom: 120 }, // Extra padding at the bottom
-          ]}
-          data={flattenedData}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          showsVerticalScrollIndicator={true}
-          keyboardShouldPersistTaps="handled"
-        />
-      </SafeAreaView>
+          <FlatList
+            style={styles.container}
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: 120 }, // Extra padding at the bottom
+            ]}
+            data={flattenedData}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+          />
+        </SafeAreaView>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
@@ -641,9 +705,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   commentsContainer: {
-    marginTop: 16,
-    paddingTop: 16,
+    marginTop: 8,
+    paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "rgba(0, 0, 0, 0.1)",
+    borderTopColor: "rgba(128, 128, 128, 0.2)",
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 12,
+    textAlign: "center",
   },
 });

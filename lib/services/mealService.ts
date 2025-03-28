@@ -1,4 +1,5 @@
 import { supabase } from "../supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface MealItem {
   id?: number;
@@ -194,12 +195,32 @@ export const mealService = {
    * Get all cities from the database
    */
   async getCities() {
+    // Check cache first
+    const cachedCities = await AsyncStorage.getItem("cached_cities");
+    if (cachedCities) {
+      const { data, timestamp } = JSON.parse(cachedCities);
+      // Use cache if less than 24 hours old
+      if (Date.now() - timestamp < 24 * 60 * 60 * 1000) {
+        return data;
+      }
+    }
+
     const { data, error } = await supabase
       .from("cities")
       .select("id, city_name")
       .order("city_name");
 
     if (error) throw error;
+
+    // Store in cache with timestamp
+    await AsyncStorage.setItem(
+      "cached_cities",
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      })
+    );
+
     return data;
   },
 
